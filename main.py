@@ -16,8 +16,8 @@ from flask_limiter.util import get_remote_address
 # 创建Flask应用实例
 app = Flask(__name__)
 
-logging.basicConfig(filename='myapp.log', level=logging.INFO)
-logging.getLogger('werkzeug').disabled = True
+logging.getLogger().setLevel(logging.DEBUG)
+# logging.getLogger('werkzeug').disabled = True
 
 os.environ["PADDLE_PDX_CACHE_HOME"] = "./module"
 os.environ["PADDLE_PDX_LOCAL_FONT_FILE_PATH"] = "./module/simfang.ttf"
