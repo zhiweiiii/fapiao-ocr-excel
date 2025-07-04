@@ -62,6 +62,11 @@ def print_order_no(result):
 # @limiter.limit("0 per day")
 # def slow():
 #     return ""
+@app.after_request
+def after_request(response):
+    # 自定义日志格式
+    logging.getLogger('werkzeug').setLevel(logging.DEBUG)
+    return response
 
 # 定义路由和视图函数
 @app.route('/ocr', methods=['GET'])
