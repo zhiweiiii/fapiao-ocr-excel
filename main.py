@@ -70,7 +70,8 @@ def print_order_no(result):
 # 定义路由和视图函数
 @app.route('/ocr', methods=['GET'])
 def ocr():
-    logging.info("开始")
+    app.logger.info("开始")
+    app.logger.error("开始")
     ### 使用url
     img_url = request.values.get('img_url')
     if img_url is None:
