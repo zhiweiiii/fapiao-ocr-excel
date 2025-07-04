@@ -1,0 +1,8 @@
+services:
+  ocr:
+    build: .
+    image: paddleocr-my:v1
+    container_name: ocr
+    ports:
+      - "80:80"
+
