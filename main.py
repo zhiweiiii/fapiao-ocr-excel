@@ -16,22 +16,22 @@ logging.getLogger('werkzeug').disabled = True
 
 os.environ["PADDLE_PDX_CACHE_HOME"] = "./module"
 # os.environ["PADDLE_PDX_LOCAL_FONT_FILE_PATH"] = "./module/simfang.ttf"
-os.environ["FLAGS_allocator_strategy"] = "naive_best_fit"
-os.environ["FLAGS_eager_delete_tensor_gb"] = "0"
+# os.environ["FLAGS_allocator_strategy"] = "naive_best_fit"
+# os.environ["FLAGS_eager_delete_tensor_gb"] = "0"
 
 paddleocr = PaddleOCR(
     use_doc_orientation_classify=False,
     use_doc_unwarping=False,
-    use_textline_orientation=False
-    # text_detection_model_dir = "./module/PP-OCRv5_server_det",
-    # text_recognition_model_dir = "./module/PP-OCRv5_server_rec"
+    use_textline_orientation=False,
+    text_detection_model_dir = "./module/PP-OCRv5_server_det",
+    text_recognition_model_dir = "./module/PP-OCRv5_server_rec"
 )
 
 def file_storage_to_ndarray(file_storage):
     file_storage.stream.seek(0)
     img = Image.open(file_storage.stream)
     if img.mode in ('P', 'L'):
-        img = img.convert('RGB')  # 统一维度为H×W×3
+        img = img.convert('BGR')  # 统一维度为H×W×3
     return numpy.array(img)  # 自动生成dtype=uint8
 
 def print_order_no(result):
