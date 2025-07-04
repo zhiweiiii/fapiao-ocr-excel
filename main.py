@@ -18,9 +18,10 @@ app = Flask(__name__)
 
 logging.getLogger('werkzeug').disabled = True
 
-os.environ["PADDLE_PDX_CACHE_HOME"] = "./module"
-os.environ["PADDLE_PDX_LOCAL_FONT_FILE_PATH"] = "./module/simfang.ttf"
+# os.environ["PADDLE_PDX_CACHE_HOME"] = "./module"
+# os.environ["PADDLE_PDX_LOCAL_FONT_FILE_PATH"] = "./module/simfang.ttf"
 os.environ["FLAGS_allocator_strategy"] = "naive_best_fit"
+os.environ["FLAGS_eager_delete_tensor_gb"] = "0"
 
 paddleocr = PaddleOCR(
     use_doc_orientation_classify=False,
