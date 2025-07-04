@@ -25,10 +25,10 @@ paddleocr = PaddleOCR(
     text_detection_model_dir = "./module/PP-OCRv5_server_det",
     text_recognition_model_dir = "./module/PP-OCRv5_server_rec")
 
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["300 per day", "50 per hour"])
+# limiter = Limiter(
+#     app=app,
+#     key_func=get_remote_address,
+#     default_limits=["300 per day", "50 per hour"])
 
 def file_storage_to_ndarray(file_storage):
     file_storage.stream.seek(0)
@@ -48,20 +48,20 @@ def print_order_no(result):
             print(res['rec_texts'])
         print("-------------------")
 
-class DisableLoggingFilter(logging.Filter):
-    def filter(self, record):
-        if request.path == '/a/nanny/getdatav2.php':
-            return False
-        return True
+# class DisableLoggingFilter(logging.Filter):
+#     def filter(self, record):
+#         if request.path == '/a/nanny/getdatav2.php':
+#             return False
+#         return True
 
-@app.before_request
-def add_logging_filter():
-    app.logger.addFilter(DisableLoggingFilter())
-
-@app.route("/a/nanny/getdatav2.php")
-@limiter.limit("0 per day")
-def slow():
-    return ""
+# @app.before_request
+# def add_logging_filter():
+#     app.logger.addFilter(DisableLoggingFilter())
+#
+# @app.route("/a/nanny/getdatav2.php")
+# @limiter.limit("0 per day")
+# def slow():
+#     return ""
 
 # 定义路由和视图函数
 @app.route('/ocr', methods=['GET'])
