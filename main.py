@@ -15,8 +15,9 @@ from flask_limiter.util import get_remote_address
 
 # 创建Flask应用实例
 app = Flask(__name__)
-# logging.getLogger('werkzeug').disabled = True
-log = logging.getLogger('main')
+
+logging.basicConfig(filename='myapp.log', level=logging.INFO)
+logging.getLogger('werkzeug').disabled = True
 
 os.environ["PADDLE_PDX_CACHE_HOME"] = "./module"
 os.environ["PADDLE_PDX_LOCAL_FONT_FILE_PATH"] = "./module/simfang.ttf"
@@ -45,11 +46,11 @@ def print_order_no(result):
         order_exist = False
         for text in res['rec_texts']:
             if "订单号" in text or "流水" in text:
-                log.info(text)
+                logging.info(text)
                 order_exist=True
         if not order_exist:
-            log.info(res['rec_texts'])
-        log.info("-------------------")
+            logging.info(res['rec_texts'])
+        logging.info("-------------------")
 
 # class DisableLoggingFilter(logging.Filter):
 #     def filter(self, record):
@@ -69,17 +70,17 @@ def print_order_no(result):
 # 定义路由和视图函数
 @app.route('/ocr', methods=['GET'])
 def ocr():
-    log.info("开始")
+    logging.info("开始")
     ### 使用url
     img_url = request.values.get('img_url')
     if img_url is None:
         filelist =request.files.getlist('img_file')
         for file in filelist:
-            log.info(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+            logging.info(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
             result = paddleocr.predict(input=file_storage_to_ndarray(file))
             print_order_no(result)
     else:
-        log.info(img_url)
+        logging.info(img_url)
         result = paddleocr.predict(input=img_url)
         print_order_no(result)
     return json.dumps({"text": result[0]['rec_texts'], "poly": [i.tolist() for i in result[0]['rec_polys']]}, indent=4,
