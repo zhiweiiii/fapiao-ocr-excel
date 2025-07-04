@@ -2,19 +2,15 @@ import logging
 import os
 import time
 
+
+
 import numpy
 from PIL import Image
 from paddleocr import PaddleOCR
 
 from flask import Flask, request, make_response,abort
-import cv2
 import json
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 
-
-# 创建Flask应用实例
-app = Flask(__name__)
 
 logging.getLogger('werkzeug').disabled = True
 
@@ -26,14 +22,10 @@ os.environ["FLAGS_eager_delete_tensor_gb"] = "0"
 paddleocr = PaddleOCR(
     use_doc_orientation_classify=False,
     use_doc_unwarping=False,
-    use_textline_orientation=False,
-    text_detection_model_dir = "./module/PP-OCRv5_server_det",
-    text_recognition_model_dir = "./module/PP-OCRv5_server_rec")
-
-# limiter = Limiter(
-#     app=app,
-#     key_func=get_remote_address,
-#     default_limits=["300 per day", "50 per hour"])
+    use_textline_orientation=False
+    # text_detection_model_dir = "./module/PP-OCRv5_server_det",
+    # text_recognition_model_dir = "./module/PP-OCRv5_server_rec"
+)
 
 def file_storage_to_ndarray(file_storage):
     file_storage.stream.seek(0)
@@ -53,20 +45,8 @@ def print_order_no(result):
             app.logger.info(res['rec_texts'])
         app.logger.info("-------------------")
 
-# class DisableLoggingFilter(logging.Filter):
-#     def filter(self, record):
-#         if request.path == '/a/nanny/getdatav2.php':
-#             return False
-#         return True
 
-# @app.before_request
-# def add_logging_filter():
-#     app.logger.addFilter(DisableLoggingFilter())
-#
-# @app.route("/a/nanny/getdatav2.php")
-# @limiter.limit("0 per day")
-# def slow():
-#     return ""
+app = Flask(__name__)
 
 # 定义路由和视图函数
 @app.route('/ocr', methods=['GET'])
