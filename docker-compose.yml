@@ -5,4 +5,4 @@ services:
     container_name: ocr
     ports:
       - "80:80"
-
+    restart: always
