@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 
@@ -46,6 +47,16 @@ def print_order_no(result):
         if not order_exist:
             print(res['rec_texts'])
         print("-------------------")
+
+class DisableLoggingFilter(logging.Filter):
+    def filter(self, record):
+        if request.path == '/a/nanny/getdatav2.php':
+            return False
+        return True
+
+@app.before_request
+def add_logging_filter():
+    app.logger.addFilter(DisableLoggingFilter())
 
 @app.route("/a/nanny/getdatav2.php")
 @limiter.limit("0 per day")
