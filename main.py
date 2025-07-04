@@ -19,6 +19,15 @@ os.environ["PADDLE_PDX_CACHE_HOME"] = "./module"
 # os.environ["FLAGS_allocator_strategy"] = "naive_best_fit"
 # os.environ["FLAGS_eager_delete_tensor_gb"] = "0"
 
+app = Flask(__name__)
+
+paddleocr = PaddleOCR(
+    use_doc_orientation_classify=False,
+    use_doc_unwarping=False,
+    use_textline_orientation=False,
+    text_detection_model_dir = "./module/PP-OCRv5_server_det",
+    text_recognition_model_dir = "./module/PP-OCRv5_server_rec"
+)
 
 def file_storage_to_ndarray(file_storage):
     file_storage.stream.seek(0)
@@ -39,7 +48,6 @@ def print_order_no(result):
         app.logger.info("-------------------")
 
 
-app = Flask(__name__)
 
 # 定义路由和视图函数
 @app.route('/ocr', methods=['GET'])
@@ -47,14 +55,6 @@ def ocr():
     app.logger.info("开始")
     ### 使用url
     img_url = request.values.get('img_url')
-
-    paddleocr = PaddleOCR(
-        use_doc_orientation_classify=False,
-        use_doc_unwarping=False,
-        use_textline_orientation=False,
-        text_detection_model_dir="./module/PP-OCRv5_server_det",
-        text_recognition_model_dir="./module/PP-OCRv5_server_rec"
-    )
     if img_url is None:
         filelist =request.files.getlist('img_file')
         for file in filelist:
