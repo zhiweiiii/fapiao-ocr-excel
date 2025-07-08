@@ -33,7 +33,7 @@ class PaddleOCRModelManager(ThreadPoolExecutor):
         for res in result:
             order_exist = False
             for text in res['rec_texts']:
-                if "订单号" in text or "流水" in text or "小票号" in text or "单据号" in text:
+                if "订单号" in text or "流水" in text or "小票号" in text or "单据号" in text or "No." in text:
                     self.app.logger.info(text)
                     order_exist=True
             if not order_exist:
