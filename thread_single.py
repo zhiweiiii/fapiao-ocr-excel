@@ -39,14 +39,14 @@ class PaddleOCRModelManager(ThreadPoolExecutor):
             line = 0
             i = 0
             for rec_boxe  in rec_boxes:
-                if int(rec_boxe[1]) - now_line >= line-20:
+                if int(rec_boxe[1]) - now_line >= line:
                     # 换行
                     res_str = res_str + "\n"+rec_texts[i]
                 else:
                     #不换行
                     res_str = res_str + "     "+rec_texts[i]
                 now_line = int(rec_boxe[1])
-                line = int(rec_boxe[3] - rec_boxe[1])
+                line = int(rec_boxe[3] - rec_boxe[1])*0.9
                 i=i+1
             res_str = res_str + "-----------\n"
         self.app.logger.info(res_str)
