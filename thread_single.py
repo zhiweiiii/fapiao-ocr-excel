@@ -44,7 +44,7 @@ class PaddleOCRModelManager(ThreadPoolExecutor):
                     res_str = res_str + "\n"+rec_texts[i]
                 else:
                     #不换行
-                    res_str = res_str + "     "+rec_texts[i]
+                    res_str = res_str + " "+rec_texts[i]
                 now_line = int(rec_boxe[1])
                 line = int(rec_boxe[3] - rec_boxe[1])*0.9
                 i=i+1
