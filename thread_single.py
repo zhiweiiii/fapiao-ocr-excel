@@ -25,11 +25,12 @@ class PaddleOCRModelManager(ThreadPoolExecutor):
         return self.submit(self.infer, **kwargs).result()
 
     def infer(self, **kwargs):
-        result=self.paddleocr.predict(**kwargs)
-        self.print_order_no(result)
+        result = self.paddleocr.predict(**kwargs)
+        result = self.print_order_no(result)
         return result
 
     def print_order_no(self,result):
+        res_str = ""
         for res in result:
             rec_boxes=res["rec_boxes"]
             rec_texts=res["rec_texts"]
@@ -40,21 +41,13 @@ class PaddleOCRModelManager(ThreadPoolExecutor):
                 if int(rec_boxe[1]) - now_line >= line-20:
                     line = int(rec_boxe[3] - rec_boxe[1])
                     # 换行
-                    print("\n"+rec_texts[i],end="")
+                    res_str = res_str + "\n"+rec_texts[i]
                     now_line = int(rec_boxe[1])
                 else:
                     #不换行
-                    print("     "+rec_texts[i], end="")
+                    res_str = res_str + "     "+rec_texts[i]
                 i=i+1
-            print("-----------\n")
-
-            # order_exist = False
-            # for text in res['rec_texts']:
-            #     if "订单号" in text or "流水" in text or "小票号" in text or "单据号" in text or "No." in text or "订单编号" in text:
-            #         self.app.logger.info(text)
-            #         order_exist=True
-            # if not order_exist:
-            #     self.app.logger.info(res['rec_texts'])
-
-            self.app.logger.info("-------------------")
+            res_str = res_str + "-----------\n"
+        self.app.logger.info(res_str)
+        return res_str
 
