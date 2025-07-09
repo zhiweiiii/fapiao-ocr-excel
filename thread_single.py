@@ -31,12 +31,30 @@ class PaddleOCRModelManager(ThreadPoolExecutor):
 
     def print_order_no(self,result):
         for res in result:
-            order_exist = False
-            for text in res['rec_texts']:
-                if "订单号" in text or "流水" in text or "小票号" in text or "单据号" in text or "No." in text or "订单编号" in text:
-                    self.app.logger.info(text)
-                    order_exist=True
-            if not order_exist:
-                self.app.logger.info(res['rec_texts'])
+            rec_boxes=res["rec_boxes"]
+            rec_texts=res["rec_texts"]
+            now_line = 0
+            line = 0
+            i = 0
+            for rec_boxe  in rec_boxes:
+                if int(rec_boxe[1]) - now_line >= line-20:
+                    line = int(rec_boxe[3] - rec_boxe[1])
+                    # 换行
+                    print("\n"+rec_texts[i],end="")
+                    now_line = int(rec_boxe[1])
+                else:
+                    #不换行
+                    print("     "+rec_texts[i], end="")
+                i=i+1
+            print("-----------\n")
+
+            # order_exist = False
+            # for text in res['rec_texts']:
+            #     if "订单号" in text or "流水" in text or "小票号" in text or "单据号" in text or "No." in text or "订单编号" in text:
+            #         self.app.logger.info(text)
+            #         order_exist=True
+            # if not order_exist:
+            #     self.app.logger.info(res['rec_texts'])
+
             self.app.logger.info("-------------------")
 
