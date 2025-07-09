@@ -1,0 +1,13 @@
+{
+    "input_path": "/root/.paddlex/predict_input/img_textline180_demo.jpg",
+    "page_index": null,
+    "class_ids": [
+        1
+    ],
+    "scores": [
+        0.9926199913024902
+    ],
+    "label_names": [
+        "180_degree"
+    ]
+}

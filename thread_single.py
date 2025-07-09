@@ -15,8 +15,9 @@ class PaddleOCRModelManager(ThreadPoolExecutor):
         # os.environ["FLAGS_eager_delete_tensor_gb"] = "0"
         self.paddleocr = PaddleOCR(
             use_doc_orientation_classify=False,
-            use_doc_unwarping=True,
+            use_doc_unwarping=False,
             use_textline_orientation=True,
+            textline_orientation_model_dir= "./module/PP-LCNet_x1_0_textline_ori_infer",
             text_detection_model_dir="./module/PP-OCRv5_server_det",
             text_recognition_model_dir="./module/PP-OCRv5_server_rec"
         )

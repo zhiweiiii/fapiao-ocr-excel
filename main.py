@@ -32,6 +32,7 @@ def ocr():
         for file in filelist:
             app.logger.info('文件处理'+file.filename)
             result = paddleocr.submit_ocr(input=file_storage_to_ndarray(file))
+        return result
     else:
         app.logger.info(img_url)
         result = paddleocr.submit_ocr(input=img_url)
