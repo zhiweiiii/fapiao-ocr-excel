@@ -42,10 +42,10 @@ class PaddleOCRModelManager(ThreadPoolExecutor):
                 if int(rec_boxe[1]) - now_line >= line-20:
                     # 换行
                     res_str = res_str + "\n"+rec_texts[i]
-                    now_line = int(rec_boxe[1])
                 else:
                     #不换行
                     res_str = res_str + "     "+rec_texts[i]
+                now_line = int(rec_boxe[1])
                 line = int(rec_boxe[3] - rec_boxe[1])
                 i=i+1
             res_str = res_str + "-----------\n"
