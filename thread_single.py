@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 class PaddleOCRModelManager(ThreadPoolExecutor):
 
     def __init__(self,current_app, **kwargs):
-        super(PaddleOCRModelManager, self).__init__(max_workers= 2,thread_name_prefix="test_",**kwargs)
+        super(PaddleOCRModelManager, self).__init__(max_workers= 1,thread_name_prefix="test_",**kwargs)
         os.environ["PADDLE_PDX_CACHE_HOME"] = "./module"
         # os.environ["PADDLE_PDX_LOCAL_FONT_FILE_PATH"] = "./module/simfang.ttf"
         # os.environ["FLAGS_allocator_strategy"] = "naive_best_fit"
