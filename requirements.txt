@@ -1,1 +1,2 @@
-pillow
+pillow~=10.1.0
+pandas~=2.3.2
