@@ -5,6 +5,8 @@ from PIL import Image
 
 from flask import Flask, request
 import json
+import tempfile
+import os
 
 from thread_single import PaddleOCRModelManager
 
@@ -31,13 +33,20 @@ def ocr():
         filelist = request.files.getlist('img_file')
         for file in filelist:
             app.logger.info('文件处理'+file.filename)
-            result = paddleocr.submit_ocr(input=file_storage_to_ndarray(file))
+            # result = paddleocr.submit_ocr(input=file_storage_to_ndarray(file))
+            # 创建临时文件（自动删除）
+            with tempfile.NamedTemporaryFile(delete=True, suffix=os.path.splitext(file.filename)[1] ) as temp_file:
+                # 保存上传的文件到临时文件
+                file.save(temp_file.name)
+                result = paddleocr.submit_ocr(input=temp_file.name)
         return result
     else:
+
+            # 文件处理逻辑...
         app.logger.info(img_url)
         result = paddleocr.submit_ocr(input=img_url)
-    return json.dumps({"text": result[0]['rec_texts'], "poly": [i.tolist() for i in result[0]['rec_polys']]}, indent=4,
-                      ensure_ascii=False)
+
+    return result
 
 
 # 启动应用
