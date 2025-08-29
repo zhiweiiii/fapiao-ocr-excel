@@ -557,8 +557,8 @@
             }, 500);
 
             // 发送到后端 - 使用GET请求
-            fetch(`/upload`, {
-                method: 'GET',
+            fetch(`/ocr_excel`, {
+                method: 'POST',
                 body: formData
             })
             .then(response => {
