@@ -269,6 +269,7 @@
             align-items: center;
             gap: 10px;
             margin-top: 15px;
+            text-decoration: none;
         }
 
         .download-btn:hover {
@@ -361,9 +362,9 @@
         <div class="result-section" id="resultSection">
             <h3><i class="fas fa-check-circle"></i> 处理完成！</h3>
             <p>发票信息已成功提取，点击下方按钮下载Excel文件</p>
-            <button class="download-btn" id="downloadBtn">
+            <a class="download-btn" id="downloadLink" href="#" style="display: none;">
                 <i class="fas fa-file-excel"></i> 下载Excel文件
-            </button>
+            </a>
         </div>
     </div>
 
@@ -389,7 +390,7 @@
         const progressBar = document.getElementById('progressBar');
         const statusText = document.getElementById('statusText');
         const resultSection = document.getElementById('resultSection');
-        const downloadBtn = document.getElementById('downloadBtn');
+        const downloadLink = document.getElementById('downloadLink');
         const notification = document.getElementById('notification');
         const notificationText = document.getElementById('notificationText');
 
@@ -525,56 +526,20 @@
             // 显示进度条
             progressContainer.style.display = 'block';
             processBtn.disabled = true;
+            resultSection.style.display = 'none';
 
             // 创建FormData对象
             const formData = new FormData();
 
             // 添加所有文件到FormData
             uploadedFiles.forEach(file => {
-                formData.append('img_file', file);
+                formData.append('files', file);
             });
 
             // 更新进度状态
             statusText.textContent = "正在上传文件...";
 
-            // 发送到OCR接口
-            fetch('http://106.75.133.202/ocr', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('网络响应不正常');
-                }
-                return response.blob();
-            })
-            .then(blob => {
-                // 更新进度
-                progressBar.style.width = '100%';
-                statusText.textContent = "处理完成！";
-
-                // 创建下载链接
-                const downloadUrl = URL.createObjectURL(blob);
-                downloadBtn.onclick = function() {
-                    const a = document.createElement('a');
-                    a.href = downloadUrl;
-                    a.download = 'invoice_data.xlsx';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                };
-
-                // 显示结果部分
-                resultSection.style.display = 'block';
-            })
-            .catch(error => {
-                console.error('错误:', error);
-                showNotification('处理失败: ' + error.message);
-                progressContainer.style.display = 'none';
-                processBtn.disabled = false;
-            });
-
-            // 模拟进度更新（实际应用中应根据上传进度更新）
+            // 模拟进度更新
             let progress = 0;
             const interval = setInterval(() => {
                 progress += 5;
@@ -590,6 +555,39 @@
                     clearInterval(interval);
                 }
             }, 500);
+
+            // 发送到后端 - 使用GET请求
+            const fileNames = uploadedFiles.map(file => file.name).join(',');
+            fetch(`/upload?files=${encodeURIComponent(fileNames)}`, {
+                method: 'GET'
+            })
+            .then(response => {
+                clearInterval(interval);
+
+                if (!response.ok) {
+                    return response.json().then(err => { throw new Error(err.error) });
+                }
+
+                progressBar.style.width = '100%';
+                statusText.textContent = "处理完成！";
+
+                return response.blob();
+            })
+            .then(blob => {
+                // 创建下载链接
+                const downloadUrl = URL.createObjectURL(blob);
+                downloadLink.href = downloadUrl;
+                downloadLink.style.display = 'inline-flex';
+
+                // 显示结果部分
+                resultSection.style.display = 'block';
+            })
+            .catch(error => {
+                console.error('错误:', error);
+                showNotification('处理失败: ' + error.message);
+                progressContainer.style.display = 'none';
+                processBtn.disabled = false;
+            });
         }
     </script>
 </body>
