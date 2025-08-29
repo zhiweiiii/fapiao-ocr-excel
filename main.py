@@ -70,18 +70,6 @@ def create_invoice_with_pandas(data, output_path=None):
     # 处理可能缺失的列
     if not items_df.empty:
         items_df['序号'] = range(1, len(items_df) + 1)
-
-        # 计算金额和税额，处理可能缺失的字段
-        if 'quantity' in items_df.columns and 'unit_price' in items_df.columns:
-            items_df['金额'] = items_df['quantity'] * items_df['unit_price']
-        else:
-            items_df['金额'] = 0.0
-
-        if '金额' in items_df.columns and 'tax_rate' in items_df.columns:
-            items_df['税额'] = items_df['金额'] * items_df['tax_rate']
-        else:
-            items_df['税额'] = 0.0
-
         # 添加可能缺失的列
         for col in ['product_name', 'specification', 'unit', 'quantity', 'unit_price', 'tax_rate']:
             if col not in items_df.columns:
