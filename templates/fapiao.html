@@ -538,8 +538,8 @@
             statusText.textContent = "正在上传文件...";
 
             // 发送到OCR接口
-            fetch('http://106.75.133.202/ocr', {
-                method: 'POST',
+            fetch('ocr_excel', {
+                method: 'GET',
                 body: formData
             })
             .then(response => {
