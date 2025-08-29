@@ -3,7 +3,7 @@ import logging
 import numpy
 from PIL import Image
 
-from flask import Flask, request
+from flask import Flask, request, render_template
 import json
 import tempfile
 import os
@@ -41,12 +41,32 @@ def ocr():
                 result = paddleocr.submit_ocr(input=temp_file.name)
         return result
     else:
-
-            # 文件处理逻辑...
+        # 文件处理逻辑...
         app.logger.info(img_url)
         result = paddleocr.submit_ocr(input=img_url)
-
     return result
+
+# 定义路由和视图函数
+@app.route('/ocr_excel', methods=['GET'])
+def ocr_excel():
+    app.logger.info("开始")
+    ### 使用url
+    result = ''
+    filelist = request.files.getlist('img_file')
+    for file in filelist:
+        app.logger.info('文件处理'+file.filename)
+        # result = paddleocr.submit_ocr(input=file_storage_to_ndarray(file))
+        # 创建临时文件（自动删除）
+        with tempfile.NamedTemporaryFile(delete=True, suffix=os.path.splitext(file.filename)[1] ) as temp_file:
+            # 保存上传的文件到临时文件
+            file.save(temp_file.name)
+            result = paddleocr.submit_ocr(input=temp_file.name)
+    return result
+
+@app.route('/fapiao', methods=['GET'])
+def fapiao():
+    return render_template('fapiao.html')
+
 
 
 # 启动应用

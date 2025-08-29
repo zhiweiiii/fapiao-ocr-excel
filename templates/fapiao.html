@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>发票OCR识别工具</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #4361ee;
+            --secondary-color: #3a0ca3;
+            --success-color: #4cc9f0;
+            --light-color: #f8f9fa;
+            --dark-color: #212529;
+            --gray-color: #6c757d;
+            --danger-color: #e63946;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #f5f7fb 0%, #e6e9f0 100%);
+            color: var(--dark-color);
+            line-height: 1.6;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        h1 {
+            color: var(--primary-color);
+            margin-bottom: 10px;
+            font-size: 2.2rem;
+        }
+
+        .description {
+            color: var(--gray-color);
+            margin-bottom: 20px;
+            font-size: 1.1rem;
+        }
+
+        .upload-container {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 40px 20px;
+            text-align: center;
+            transition: all 0.3s;
+            background-color: var(--light-color);
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        .upload-container.dragover {
+            border-color: var(--primary-color);
+            background-color: rgba(67, 97, 238, 0.05);
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .browse-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+            margin-top: 15px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .browse-btn:hover {
+            background-color: var(--secondary-color);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .file-types {
+            margin-top: 10px;
+            font-size: 14px;
+            color: var(--gray-color);
+        }
+
+        .preview-section {
+            margin-bottom: 30px;
+        }
+
+        .preview-title {
+            margin-bottom: 15px;
+            font-size: 18px;
+            color: var(--dark-color);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .preview-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .preview-item {
+            width: 150px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s;
+        }
+
+        .preview-item:hover {
+            transform: translateY(-5px);
+        }
+
+        .preview-item img {
+            width: 100%;
+            height: 100px;
+            object-fit: cover;
+        }
+
+        .preview-item .file-name {
+            padding: 8px;
+            font-size: 12px;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            white-space: nowrap;
+            background-color: #f8f9fa;
+        }
+
+        .remove-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(255, 255, 255, 0.9);
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            color: var(--danger-color);
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .remove-btn:hover {
+            background: white;
+            transform: scale(1.1);
+        }
+
+        .action-section {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .process-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 14px 35px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .process-btn:hover {
+            background-color: var(--secondary-color);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .process-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .progress-container {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .progress-bar {
+            height: 10px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-color), var(--success-color));
+            width: 0%;
+            transition: width 0.4s ease;
+        }
+
+        .status-text {
+            font-size: 14px;
+            color: var(--gray-color);
+        }
+
+        .result-section {
+            text-align: center;
+            display: none;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            margin-top: 20px;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .download-btn {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 14px 35px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .download-btn:hover {
+            background-color: #218838;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            color: var(--gray-color);
+            font-size: 14px;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 5px;
+            color: white;
+            background-color: var(--danger-color);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            display: none;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+
+            .upload-container {
+                padding: 30px 15px;
+            }
+
+            .preview-item {
+                width: 120px;
+            }
+
+            h1 {
+                font-size: 1.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-receipt"></i> 发票OCR识别工具</h1>
+            <p class="description">上传发票图片或PDF文件，我们将使用OCR技术识别并返回Excel格式的发票数据</p>
+        </header>
+
+        <div class="upload-container" id="dropZone">
+            <div class="upload-icon"><i class="fas fa-cloud-upload-alt"></i></div>
+            <p>拖放文件到此处或</p>
+            <input type="file" id="fileInput" class="file-input" accept=".jpg,.jpeg,.png,.pdf" multiple>
+            <button class="browse-btn" onclick="document.getElementById('fileInput').click()">
+                <i class="fas fa-folder-open"></i> 浏览文件
+            </button>
+            <p class="file-types">支持格式: JPG, PNG, PDF</p>
+        </div>
+
+        <div class="preview-section">
+            <h3 class="preview-title"><i class="fas fa-images"></i> 已上传文件</h3>
+            <div class="preview-container" id="filePreview">
+                <p id="noFilesMessage">暂无上传文件</p>
+            </div>
+        </div>
+
+        <div class="action-section">
+            <button class="process-btn" id="processBtn" disabled>
+                <i class="fas fa-cogs"></i> 开始识别处理
+            </button>
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar">
+                    <div class="progress" id="progressBar"></div>
+                </div>
+                <p class="status-text" id="statusText">准备中...</p>
+            </div>
+        </div>
+
+        <div class="result-section" id="resultSection">
+            <h3><i class="fas fa-check-circle"></i> 处理完成！</h3>
+            <p>发票信息已成功提取，点击下方按钮下载Excel文件</p>
+            <button class="download-btn" id="downloadBtn">
+                <i class="fas fa-file-excel"></i> 下载Excel文件
+            </button>
+        </div>
+    </div>
+
+    <div class="notification" id="notification">
+        <i class="fas fa-exclamation-circle"></i> <span id="notificationText"></span>
+    </div>
+
+    <footer>
+        <p>© 2023 发票OCR识别工具 | 使用先进OCR技术准确提取发票数据</p>
+    </footer>
+
+    <script>
+        // 全局变量
+        let uploadedFiles = [];
+
+        // DOM元素
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const filePreview = document.getElementById('filePreview');
+        const noFilesMessage = document.getElementById('noFilesMessage');
+        const processBtn = document.getElementById('processBtn');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const statusText = document.getElementById('statusText');
+        const resultSection = document.getElementById('resultSection');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const notification = document.getElementById('notification');
+        const notificationText = document.getElementById('notificationText');
+
+        // 显示通知
+        function showNotification(message, isError = true) {
+            notification.style.backgroundColor = isError ? '#e63946' : '#28a745';
+            notificationText.textContent = message;
+            notification.style.display = 'block';
+
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+        }
+
+        // 拖放事件处理
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight() {
+            dropZone.classList.add('dragover');
+        }
+
+        function unhighlight() {
+            dropZone.classList.remove('dragover');
+        }
+
+        // 处理文件拖放
+        dropZone.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        }
+
+        // 处理文件选择
+        fileInput.addEventListener('change', function() {
+            handleFiles(this.files);
+        });
+
+        // 处理上传的文件
+        function handleFiles(files) {
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                if (isValidFile(file)) {
+                    uploadedFiles.push(file);
+                    previewFile(file);
+                } else {
+                    showNotification(`文件 ${file.name} 格式不支持，请上传图片或PDF文件`);
+                }
+            }
+
+            updateProcessButtonState();
+        }
+
+        // 验证文件类型
+        function isValidFile(file) {
+            const validTypes = ['image/jpeg', 'image/png', 'application/pdf'];
+            return validTypes.includes(file.type);
+        }
+
+        // 文件预览
+        function previewFile(file) {
+            noFilesMessage.style.display = 'none';
+
+            const previewItem = document.createElement('div');
+            previewItem.className = 'preview-item';
+
+            if (file.type.includes('image')) {
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                previewItem.appendChild(img);
+            } else {
+                const placeholder = document.createElement('div');
+                placeholder.style.height = '100px';
+                placeholder.style.display = 'flex';
+                placeholder.style.alignItems = 'center';
+                placeholder.style.justifyContent = 'center';
+                placeholder.style.backgroundColor = '#f0f0f0';
+                placeholder.innerHTML = '<i class="fas fa-file-pdf" style="font-size: 32px; color: #e63946;"></i>';
+                previewItem.appendChild(placeholder);
+            }
+
+            const fileName = document.createElement('div');
+            fileName.className = 'file-name';
+            fileName.textContent = file.name;
+            previewItem.appendChild(fileName);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-btn';
+            removeBtn.innerHTML = '×';
+            removeBtn.onclick = function() {
+                const index = uploadedFiles.indexOf(file);
+                if (index > -1) {
+                    uploadedFiles.splice(index, 1);
+                }
+                previewItem.remove();
+
+                if (uploadedFiles.length === 0) {
+                    noFilesMessage.style.display = 'block';
+                }
+
+                updateProcessButtonState();
+            };
+
+            previewItem.appendChild(removeBtn);
+            filePreview.appendChild(previewItem);
+        }
+
+        // 更新处理按钮状态
+        function updateProcessButtonState() {
+            processBtn.disabled = uploadedFiles.length === 0;
+        }
+
+        // 处理按钮点击事件
+        processBtn.addEventListener('click', startProcessing);
+
+        function startProcessing() {
+            // 显示进度条
+            progressContainer.style.display = 'block';
+            processBtn.disabled = true;
+
+            // 创建FormData对象
+            const formData = new FormData();
+
+            // 添加所有文件到FormData
+            uploadedFiles.forEach(file => {
+                formData.append('img_file', file);
+            });
+
+            // 更新进度状态
+            statusText.textContent = "正在上传文件...";
+
+            // 发送到OCR接口
+            fetch('http://106.75.133.202/ocr', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('网络响应不正常');
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                // 更新进度
+                progressBar.style.width = '100%';
+                statusText.textContent = "处理完成！";
+
+                // 创建下载链接
+                const downloadUrl = URL.createObjectURL(blob);
+                downloadBtn.onclick = function() {
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = 'invoice_data.xlsx';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                };
+
+                // 显示结果部分
+                resultSection.style.display = 'block';
+            })
+            .catch(error => {
+                console.error('错误:', error);
+                showNotification('处理失败: ' + error.message);
+                progressContainer.style.display = 'none';
+                processBtn.disabled = false;
+            });
+
+            // 模拟进度更新（实际应用中应根据上传进度更新）
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += 5;
+                progressBar.style.width = `${progress}%`;
+
+                if (progress === 30) {
+                    statusText.textContent = "文件上传完成，开始OCR识别...";
+                } else if (progress === 60) {
+                    statusText.textContent = "OCR识别中...";
+                } else if (progress === 90) {
+                    statusText.textContent = "生成Excel文件...";
+                } else if (progress >= 100) {
+                    clearInterval(interval);
+                }
+            }, 500);
+        }
+    </script>
+</body>
+</html>
