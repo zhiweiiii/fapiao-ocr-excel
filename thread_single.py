@@ -24,7 +24,7 @@ class PaddleOCRModelManager(ThreadPoolExecutor):
         self.app = current_app
     def submit_ocr(self, **kwargs):
         result =self.submit(self.infer, **kwargs)
-        self.app.logger.info('识别结果：',str(result))
+        self.app.logger.info('识别结果：'+str(result))
         return result.result()
 
     def infer(self, **kwargs):
