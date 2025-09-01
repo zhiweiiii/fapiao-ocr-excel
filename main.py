@@ -38,12 +38,12 @@ def ocr():
             with tempfile.NamedTemporaryFile(delete=True, suffix=os.path.splitext(file.filename)[1] ) as temp_file:
                 # 保存上传的文件到临时文件
                 file.save(temp_file.name)
-                result = paddleocr.submit_ocr(input=temp_file.name)
+                result,_ = paddleocr.submit_ocr(input=temp_file.name)
         return result
     else:
         # 文件处理逻辑...
         app.logger.info(img_url)
-        result = paddleocr.submit_ocr(input=img_url)
+        result,_ = paddleocr.submit_ocr(input=img_url)
     return result
 
 
@@ -114,6 +114,72 @@ def create_invoice_with_pandas(data, output_path=None):
 
     return output_path
 
+
+def extract_invoice_info(texts,boxes) -> dict[str, any]:
+    """
+    从OCR数据中提取发票结构化信息
+    参数:
+        df: 包含OCR数据的DataFrame
+    返回:
+        结构化发票信息字典
+    """ 
+    # = {"items":[{'product_name':"1", 'specification':"2", 'unit':"3",
+    #              'quantity':"4", 'unit_price':"5", '金额':"6", 'tax_rate':"7", '税额':"8"}],
+    #         "'invoice_number":"2423","buyer_name":"323","buyer_tax_id":"54534",
+    #         "seller_name":"35456","seller_tax_id":"3434"
+    #         }
+    invoice_info = {}
+    # 提取发票号码
+    invoice_no_texts = texts[texts.str.contains('发票号码')]['text'].values
+    if len(invoice_no_texts) > 0:
+        invoice_info['发票号码'] = invoice_no_texts[0].split('：')[-1] if '：' in invoice_no_texts[0] else \
+        invoice_no_texts[0]
+
+    # 提取开票日期
+    date_texts = texts[texts.str.contains('开票日期')]['text'].values
+    if len(date_texts) > 0:
+        invoice_info['开票日期'] = date_texts[0].split('：')[-1] if '：' in date_texts[0] else date_texts[0]
+
+    # 提取购买方名称
+    buyer_name_texts = texts[(texts.str.contains('名称：')) & (~texts.str.contains('销售方'))]
+    if len(buyer_name_texts) > 0:
+        # 假设购买方名称在"名称："后面
+        name_idx = buyer_name_texts.index[0]
+        # 查找可能的下一个文本块作为名称
+        next_texts = texts[(texts['center_y'] > buyer_name_texts.loc[name_idx, 'center_y'] - 20) &
+                        (texts['center_y'] < buyer_name_texts.loc[name_idx, 'center_y'] + 20) &
+                        (texts['center_x'] > buyer_name_texts.loc[name_idx, 'center_x'])]
+        if len(next_texts) > 0:
+            invoice_info['购买方名称'] = next_texts.iloc[0]['text']
+
+    # 提取销售方名称
+    seller_name_texts = texts[texts.str.contains('销售方信息')]
+    if len(seller_name_texts) > 0:
+        seller_idx = seller_name_texts.index[0]
+        # 在销售方信息下面查找名称
+        name_texts = texts[(texts['center_y'] > seller_name_texts.loc[seller_idx, 'center_y']) &
+                        (texts.str.contains('名称：'))]
+        if len(name_texts) > 0:
+            name_idx = name_texts.index[0]
+            next_texts = texts[(texts['center_y'] > name_texts.loc[name_idx, 'center_y'] - 20) &
+                            (texts['center_y'] < name_texts.loc[name_idx, 'center_y'] + 20) &
+                            (texts['center_x'] > name_texts.loc[name_idx, 'center_x'])]
+            if len(next_texts) > 0:
+                invoice_info['销售方名称'] = next_texts.iloc[0]['text']
+
+    # 提取金额信息
+    amount_texts = texts[texts.str.contains('价税合计')]
+    if len(amount_texts) > 0:
+        amount_idx = amount_texts.index[0]
+        # 查找金额数值
+        amount_value_texts = texts[(texts['center_y'] > amount_texts.loc[amount_idx, 'center_y']) &
+                                (texts.str.contains('￥'))]
+        if len(amount_value_texts) > 0:
+            invoice_info['价税合计'] = amount_value_texts.iloc[0]['text']
+
+    return invoice_info
+
+
 # 定义路由和视图函数
 @app.route('/ocr_excel', methods=['POST'])
 def ocr_excel():
@@ -125,15 +191,11 @@ def ocr_excel():
         app.logger.info('文件处理'+file.filename)
         # result = paddleocr.submit_ocr(input=file_storage_to_ndarray(file))
         # 创建临时文件（自动删除）
-        with tempfile.NamedTemporaryFile(delete=True, suffix=os.path.splitext(file.filename)[1] ) as temp_file:
+        with (tempfile.NamedTemporaryFile(delete=True, suffix=os.path.splitext(file.filename)[1] ) as temp_file):
             # 保存上传的文件到临时文件
             file.save(temp_file.name)
-            result = paddleocr.submit_ocr(input=temp_file.name)
-            data = {"items":[{'product_name':"1", 'specification':"2", 'unit':"3",
-                         'quantity':"4", 'unit_price':"5", '金额':"6", 'tax_rate':"7", '税额':"8"}],
-                    "'invoice_number":"2423","buyer_name":"323","buyer_tax_id":"54534",
-                    "seller_name":"35456","seller_tax_id":"3434"
-                    }
+            result,result_all = paddleocr.submit_ocr(input=temp_file.name)
+            data= extract_invoice_info(result_all[0]["rec_texts"],result_all[0]["rec_boxes"]) 
             temp_path =create_invoice_with_pandas(data)
 
     return send_file(
