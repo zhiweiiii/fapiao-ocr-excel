@@ -118,16 +118,15 @@ def create_invoice_with_pandas(data, output_path=None):
 def extract_invoice_info(texts,boxes) -> dict[str, any]:
     """
     从OCR数据中提取发票结构化信息
-    参数:
-        df: 包含OCR数据的DataFrame
     返回:
         结构化发票信息字典
-    """ 
-    # = {"items":[{'product_name':"1", 'specification':"2", 'unit':"3",
+    # {"items":[{'product_name':"1", 'specification':"2", 'unit':"3",
     #              'quantity':"4", 'unit_price':"5", '金额':"6", 'tax_rate':"7", '税额':"8"}],
     #         "'invoice_number":"2423","buyer_name":"323","buyer_tax_id":"54534",
     #         "seller_name":"35456","seller_tax_id":"3434"
     #         }
+    """ 
+
     invoice_info = {}
     # 提取发票号码
     invoice_no_texts = texts[texts.str.contains('发票号码')]['text'].values
