@@ -29,7 +29,7 @@ class PaddleOCRModelManager(ThreadPoolExecutor):
     def infer(self, **kwargs):
         result_str = self.paddleocr.predict(**kwargs)
         result = self.print_order_no(result_str)
-        self.app.logger.info('识别结果：' + result)
+        # self.app.logger.info('识别结果：' + result)
         return result,result_str
 
     def print_order_no(self,result):
