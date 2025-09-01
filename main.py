@@ -47,137 +47,227 @@ def ocr():
     return result
 
 
-import pandas as pd
 from datetime import datetime
+def create_invoices_with_pandas(data_list, output_path=None):
+    """
+    批量生成发票Excel，主表和子表分别保存在同一个Excel文件的两个sheet中，子表sheet包含字段名
+    :param data_list: list of dict，每个dict为结构化发票信息
+    :param output_path: 输出文件路径
+    :return: 输出文件路径
+    """
+    import pandas as pd
+    from datetime import datetime
 
-
-def create_invoice_with_pandas(data, output_path=None):
-    """使用pandas创建发票，包含容错处理"""
     if output_path is None:
-        output_path = f"发票_pandas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        output_path = f"发票批量导出_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
-    # 确保data是字典类型
-    if not isinstance(data, dict):
-        data = {}
+    # 主表数据
+    main_table_rows = []
+    # 子表数据
+    detail_table_rows = []
 
-    # 创建商品明细DataFrame，处理可能的缺失数据
-    items_data = data.get('items', [])
-    if not isinstance(items_data, list):
-        items_data = []
+    for idx, data in enumerate(data_list):
+        # 主表
+        main_row = {
+            '发票序号': idx + 1,
+            '发票号码': data.get('invoice_number', ''),
+            '开票日期': data.get('invoice_date', ''),
+            '购买方名称': data.get('buyer_name', ''),
+            '购买方税号': data.get('buyer_tax_id', ''),
+            '销售方名称': data.get('seller_name', ''),
+            '销售方税号': data.get('seller_tax_id', '')
+        }
+        main_table_rows.append(main_row)
 
-    items_df = pd.DataFrame(items_data)
+        # 子表
+        for item in data.get('items', []):
+            detail_row = {
+                '发票序号': idx + 1,
+                '货物或应税劳务名称': item.get('product_name', ''),
+                '规格型号': item.get('specification', ''),
+                '单位': item.get('unit', ''),
+                '数量': item.get('quantity', ''),
+                '单价': item.get('unit_price', ''),
+                '金额': item.get('金额', ''),
+                '税率': item.get('tax_rate', ''),
+                '税额': item.get('税额', '')
+            }
+            detail_table_rows.append(detail_row)
 
-    # 处理可能缺失的列
-    if not items_df.empty:
-        items_df['序号'] = range(1, len(items_df) + 1)
-        # 添加可能缺失的列
-        for col in ['product_name', 'specification', 'unit', 'quantity', 'unit_price', 'tax_rate']:
-            if col not in items_df.columns:
-                items_df[col] = ''
+    # DataFrame
+    main_df = pd.DataFrame(main_table_rows)
+    detail_df = pd.DataFrame(detail_table_rows, columns=[
+        '发票序号', '货物或应税劳务名称', '规格型号', '单位', '数量', '单价', '金额', '税率', '税额'
+    ])
 
-        # 重新排列列顺序
-        items_df = items_df[['序号', 'product_name', 'specification', 'unit',
-                             'quantity', 'unit_price', '金额', 'tax_rate', '税额']]
-
-        # 重命名列
-        items_df.columns = ['序号', '货物或应税劳务名称', '规格型号', '单位',
-                            '数量', '单价', '金额', '税率', '税额']
-    else:
-        # 创建空的DataFrame
-        items_df = pd.DataFrame(columns=['序号', '货物或应税劳务名称', '规格型号', '单位',
-                                         '数量', '单价', '金额', '税率', '税额'])
-
-    # 创建Excel写入器
+    # 写入同一个Excel文件的两个sheet，均带字段名
     try:
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-            # 写入商品明细
-            items_df.to_excel(writer, sheet_name='发票明细', index=False, startrow=10)
-
-            # 获取工作表进行格式设置
-            workbook = writer.book
-            worksheet = writer.sheets['发票明细']
-
-            # 添加发票头信息，使用get方法提供默认值
-            worksheet['A1'] = '增值税专用发票'
-            worksheet['A3'] = f"发票代码: {data.get('invoice_code', '')}"
-            worksheet['C3'] = f"发票号码: {data.get('invoice_number', '')}"
-            worksheet['A4'] = f"购买方: {data.get('buyer_name', '')}"
-            worksheet['C4'] = f"纳税人识别号: {data.get('buyer_tax_id', '')}"
-            worksheet['A5'] = f"销售方: {data.get('seller_name', '')}"
-            worksheet['C5'] = f"纳税人识别号: {data.get('seller_tax_id', '')}"
-
+            main_df.to_excel(writer, sheet_name='发票主表', index=False)
+            detail_df.to_excel(writer, sheet_name='发票明细', index=False)
     except Exception as e:
-        # 处理文件写入错误
         print(f"创建Excel文件时出错: {e}")
-        # 可以选择重新抛出异常或返回错误信息
         raise
-
     return output_path
 
-
-def extract_invoice_info(texts,boxes) -> dict[str, any]:
+def extract_invoice_info(texts, boxes):
     """
-    从OCR数据中提取发票结构化信息
+    从OCR结果（文本和对应box）中提取结构化发票信息，兼容多种布局和字段变化。
+    参数:
+        texts: list[str]
+        boxes: list[list]
     返回:
-        结构化发票信息字典
-    # {"items":[{'product_name':"1", 'specification':"2", 'unit':"3",
-    #              'quantity':"4", 'unit_price':"5", '金额':"6", 'tax_rate':"7", '税额':"8"}],
-    #         "'invoice_number":"2423","buyer_name":"323","buyer_tax_id":"54534",
-    #         "seller_name":"35456","seller_tax_id":"3434"
-    #         }
-    """ 
+        dict，包含发票结构化信息
+    """
+    import re
+
+    def find_near_text(keyword, prefer_right=True, prefer_below=False):
+        """寻找与关键字最近的文本，支持左右/上下优先"""
+        indices = [i for i, t in enumerate(texts) if keyword in t]
+        if not indices:
+            return None, None
+        idx = indices[0]
+        x0, y0, x1, y1 = boxes[idx]
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+
+        min_dist, min_idx = float('inf'), None
+        for i, (t, b) in enumerate(zip(texts, boxes)):
+            if i == idx or not t.strip() or t == keyword:
+                continue
+            tx0, ty0, tx1, ty1 = b
+            tcx, tcy = (tx0 + tx1) / 2, (ty0 + ty1) / 2
+            dx, dy = tcx - cx, tcy - cy
+            # 优先右侧或下方
+            if prefer_right and dx < 0:
+                continue
+            if prefer_below and dy < 0:
+                continue
+            dist = (dx ** 2 + dy ** 2) ** 0.5
+            if dist < min_dist:
+                min_dist, min_idx = dist, i
+        return texts[min_idx] if min_idx is not None else None, min_idx
 
     invoice_info = {}
-    # 提取发票号码
-    invoice_no_texts = texts[texts.str.contains('发票号码')]['text'].values
-    if len(invoice_no_texts) > 0:
-        invoice_info['发票号码'] = invoice_no_texts[0].split('：')[-1] if '：' in invoice_no_texts[0] else \
-        invoice_no_texts[0]
 
-    # 提取开票日期
-    date_texts = texts[texts.str.contains('开票日期')]['text'].values
-    if len(date_texts) > 0:
-        invoice_info['开票日期'] = date_texts[0].split('：')[-1] if '：' in date_texts[0] else date_texts[0]
+    # 1. 发票号码
+    invoice_number = None
+    for t in texts:
+        m = re.search(r'发票号码[:：]?\s*([0-9A-Za-z]+)', t)
+        if m:
+            invoice_number = m.group(1)
+            break
+    if not invoice_number:
+        # 容错: 只找包含20位数字的字符串
+        for t in texts:
+            m = re.match(r'\d{20}', t)
+            if m:
+                invoice_number = m.group(0)
+                break
+    invoice_info['invoice_number'] = invoice_number or ""
 
-    # 提取购买方名称
-    buyer_name_texts = texts[(texts.str.contains('名称：')) & (~texts.str.contains('销售方'))]
-    if len(buyer_name_texts) > 0:
-        # 假设购买方名称在"名称："后面
-        name_idx = buyer_name_texts.index[0]
-        # 查找可能的下一个文本块作为名称
-        next_texts = texts[(texts['center_y'] > buyer_name_texts.loc[name_idx, 'center_y'] - 20) &
-                        (texts['center_y'] < buyer_name_texts.loc[name_idx, 'center_y'] + 20) &
-                        (texts['center_x'] > buyer_name_texts.loc[name_idx, 'center_x'])]
-        if len(next_texts) > 0:
-            invoice_info['购买方名称'] = next_texts.iloc[0]['text']
+    # 2. 开票日期
+    invoice_date = ""
+    for t in texts:
+        m = re.search(r'开票日期[:：]?\s*([0-9]{8})', t)
+        if m:
+            invoice_date = m.group(1)
+            break
+        m = re.search(r'开票日期[:：]?\s*([0-9\-年月日]+)', t)
+        if m:
+            invoice_date = m.group(1)
+            break
+    invoice_info['invoice_date'] = invoice_date
 
-    # 提取销售方名称
-    seller_name_texts = texts[texts.str.contains('销售方信息')]
-    if len(seller_name_texts) > 0:
-        seller_idx = seller_name_texts.index[0]
-        # 在销售方信息下面查找名称
-        name_texts = texts[(texts['center_y'] > seller_name_texts.loc[seller_idx, 'center_y']) &
-                        (texts.str.contains('名称：'))]
-        if len(name_texts) > 0:
-            name_idx = name_texts.index[0]
-            next_texts = texts[(texts['center_y'] > name_texts.loc[name_idx, 'center_y'] - 20) &
-                            (texts['center_y'] < name_texts.loc[name_idx, 'center_y'] + 20) &
-                            (texts['center_x'] > name_texts.loc[name_idx, 'center_x'])]
-            if len(next_texts) > 0:
-                invoice_info['销售方名称'] = next_texts.iloc[0]['text']
+    # 3. 购买方/销售方名称、税号（信用代码）
+    buyer_name, buyer_tax_id = "", ""
+    seller_name, seller_tax_id = "", ""
+    # 找到"购买方信息"和"销售方信息"的索引
+    buyer_idx = next((i for i, t in enumerate(texts) if '购买方' in t), None)
+    seller_idx = next((i for i, t in enumerate(texts) if '销售方' in t), None)
 
-    # 提取金额信息
-    amount_texts = texts[texts.str.contains('价税合计')]
-    if len(amount_texts) > 0:
-        amount_idx = amount_texts.index[0]
-        # 查找金额数值
-        amount_value_texts = texts[(texts['center_y'] > amount_texts.loc[amount_idx, 'center_y']) &
-                                (texts.str.contains('￥'))]
-        if len(amount_value_texts) > 0:
-            invoice_info['价税合计'] = amount_value_texts.iloc[0]['text']
+    # 搜索购买方信息区域
+    if buyer_idx is not None:
+        for i in range(buyer_idx, min(buyer_idx + 5, len(texts))):
+            if '名称' in texts[i]:
+                name, _ = find_near_text('名称', prefer_right=True)
+                if name: buyer_name = name
+            if '纳税人识别号' in texts[i] or '统一社会信用代码' in texts[i]:
+                s = texts[i]
+                match = re.search(r'([0-9A-Za-z]{8,})', s)
+                if match: buyer_tax_id = match.group(1)
+    # 搜索销售方信息区域
+    if seller_idx is not None:
+        for i in range(seller_idx, min(seller_idx + 5, len(texts))):
+            if '名称' in texts[i]:
+                name, _ = find_near_text('名称', prefer_right=True)
+                if name: seller_name = name
+            if '纳税人识别号' in texts[i] or '统一社会信用代码' in texts[i]:
+                s = texts[i]
+                match = re.search(r'([0-9A-Za-z]{8,})', s)
+                if match: seller_tax_id = match.group(1)
+    # 容错: 全局找
+    if not buyer_name:
+        for t in texts:
+            if re.match(r'^[\u4e00-\u9fa5A-Za-z0-9（）()]+$', t) and 2 < len(t) < 30 and ('公司' in t or '店' in t):
+                buyer_name = t
+                break
+    if not seller_name:
+        for t in texts[::-1]:
+            if re.match(r'^[\u4e00-\u9fa5A-Za-z0-9（）()]+$', t) and 2 < len(t) < 30 and ('公司' in t or '店' in t):
+                seller_name = t
+                break
+
+    invoice_info['buyer_name'] = buyer_name
+    invoice_info['buyer_tax_id'] = buyer_tax_id
+    invoice_info['seller_name'] = seller_name
+    invoice_info['seller_tax_id'] = seller_tax_id
+
+    # 4. 明细项目提取
+    # 动态发现表头行
+    head_keywords = ['项目名称', '规格', '单位', '数量', '单价', '金额', '税率', '税额']
+    header_row = None
+    for i, t in enumerate(texts):
+        if sum([kw in t for kw in head_keywords]) >= 4:
+            header_row = i
+            break
+    items = []
+    if header_row is not None:
+        # 动态确定各列顺序
+        header_text = texts[header_row]
+        columns = []
+        for kw in head_keywords:
+            if kw in header_text:
+                columns.append(kw)
+        # 明细行区间
+        for i in range(header_row+1, len(texts)):
+            line = texts[i]
+            if any(x in line for x in ['合计', '价税合计', '备注', '开票人']):
+                break
+            # 提取数字或内容
+            # 可根据常见分隔符优化
+            cells = re.split(r'[\s,，\*]+', line)
+            # 容错: 数量足够才解析
+            if len(cells) >= len(columns):
+                item = {}
+                for j, col in enumerate(columns):
+                    val = cells[j] if j < len(cells) else ""
+                    # 标准化key
+                    key_map = {
+                        '项目名称': 'product_name',
+                        '规格型号': 'specification',
+                        '规格': 'specification',
+                        '单位': 'unit',
+                        '数量': 'quantity',
+                        '单价': 'unit_price',
+                        '金额': '金额',
+                        '税率': 'tax_rate',
+                        '税额': '税额'
+                    }
+                    item[key_map.get(col, col)] = val
+                items.append(item)
+    invoice_info['items'] = items
 
     return invoice_info
-
 
 # 定义路由和视图函数
 @app.route('/ocr_excel', methods=['POST'])
@@ -186,16 +276,16 @@ def ocr_excel():
     ### 使用url
     result = ''
     filelist = request.files.getlist('img_file')
+    ocr_fp_list = []
     for file in filelist:
         app.logger.info('文件处理'+file.filename)
-        # result = paddleocr.submit_ocr(input=file_storage_to_ndarray(file))
         # 创建临时文件（自动删除）
         with (tempfile.NamedTemporaryFile(delete=True, suffix=os.path.splitext(file.filename)[1] ) as temp_file):
             # 保存上传的文件到临时文件
             file.save(temp_file.name)
             result,result_all = paddleocr.submit_ocr(input=temp_file.name)
-            data= extract_invoice_info(result_all[0]["rec_texts"],result_all[0]["rec_boxes"]) 
-            temp_path =create_invoice_with_pandas(data)
+            ocr_fp_list.append(extract_invoice_info(result_all[0]["rec_texts"],result_all[0]["rec_boxes"]))
+    temp_path = create_invoices_with_pandas(ocr_fp_list)
 
     return send_file(
         temp_path,
