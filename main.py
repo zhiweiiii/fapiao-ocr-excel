@@ -7,6 +7,7 @@ from flask import Flask, request, render_template, send_file
 import json
 import tempfile
 import os
+import uuid
 
 from thread_single import PaddleOCRModelManager
 
@@ -273,19 +274,20 @@ def extract_invoice_info(texts, boxes):
 @app.route('/ocr_excel', methods=['POST'])
 def ocr_excel():
     app.logger.info("开始")
-    ### 使用url
-    result = ''
     filelist = request.files.getlist('img_file')
     ocr_fp_list = []
-    for file in filelist:
-        app.logger.info('文件处理'+file.filename)
-        # 创建临时文件（自动删除）
-        with (tempfile.NamedTemporaryFile(delete=True, suffix=os.path.splitext(file.filename)[1] ) as temp_file):
-            # 保存上传的文件到临时文件
-            file.save(temp_file.name)
-            result,result_all = paddleocr.submit_ocr(input=temp_file.name)
-            ocr_fp_list.append(extract_invoice_info(result_all[0]["rec_texts"],result_all[0]["rec_boxes"]))
-    temp_path = create_invoices_with_pandas(ocr_fp_list)
+    path ="ocr_img_file"+str(uuid.uuid4())
+    with tempfile.TemporaryDirectory( prefix=path) as dir_name:
+        print(dir_name)
+        for file in filelist:
+            filename = os.path.basename(file.filename)
+            # 完整的文件路径
+            file_path = os.path.join(dir_name, filename)
+            # 保存文件
+            file.save(file_path)
+        result,result_all = paddleocr.submit_ocr(input=dir_name)
+        ocr_fp_list.append(extract_invoice_info(result_all["rec_texts"],result_all["rec_boxes"]))
+        temp_path = create_invoices_with_pandas(ocr_fp_list)
 
     return send_file(
         temp_path,
