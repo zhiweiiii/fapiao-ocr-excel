@@ -1,0 +1,23 @@
+services:
+  # paddleocrmy:
+  #   image: paddleocr-my:v1
+    
+  #   ports:
+  #     - 80:80
+  #     - 5678:5678
+  #   environment:
+  #     - FLASK_APP=main.py
+  ocr:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    image: paddleocr-my:v1
+    container_name: ocr
+    ports:
+      - 80:80
+      - 5678:5678
+#    restart: always
+    command: ["sh", "-c", "pip install debugpy -t /tmp && python /tmp/debugpy --wait-for-client --listen 0.0.0.0:5678 -m main run --no-debugger --no-reload --host 0.0.0.0 --port 80"]
+    
+    environment:
+      TZ: "Asia/Shanghai"

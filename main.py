@@ -52,8 +52,7 @@ def ocr():
     return result
 
 def create_invoices_with_pandas(data_list, output_path=None):
-    import pandas as pd
-    from datetime import datetime
+   
 
     main_field_map = {
         "invoice_type": "发票类型",
@@ -128,13 +127,37 @@ def create_invoices_with_pandas(data_list, output_path=None):
         raise
     return output_path
 
-def extract_invoice_info(result_all):
-    import numpy as np
-    import re
+def clean_value(val):
+    # 所有常见字段名及其单字、部分、拆分形式
+    field_words = [
+        "发票号码", "开票日期", "购买方名称", "购买方统一社会信用代码", "购买方纳税人识别号",
+        "统一社会信用代码", "纳税人识别号", "销售方名称", "销售方统一社会信用代码", "销售方纳税人识别号",
+        "合计金额", "合计税额", "价税合计", "大写", "小写", "金额", "税额", "税率/征收率", "税率",
+        "项目名称", "规格型号", "单位", "数量", "单价", "备注", "开票人"
+    ]
+    # 拆分为单字和部分
+    field_parts = []
+    for w in field_words:
+        field_parts.append(w)
+        field_parts.extend(list(w))
+        # 也加上前2~4字的部分匹配
+        for i in range(2, min(5, len(w))):
+            field_parts.append(w[:i])
+    # 去重
+    field_parts = list(set(field_parts))
+    # 构造正则，允许前面有各种符号、空格、括号、冒号、分号等
+    prefix_pattern = r'^([¥￥\(\)（）\[\]\{\}\s:：;；\-_,，.。/\\]*)(' + '|'.join(map(re.escape, field_parts)) + r')+([¥￥\(\)（）\[\]\{\}\s:：;；\-_,，.。/\\]*)'
+    # 多次去除前缀
+    while True:
+        new_val = re.sub(prefix_pattern, '', val)
+        if new_val == val:
+            break
+        val = new_val
+    val = val.strip()
+    return val
 
-    # 字段关键词映射
+def extract_invoice_info(result_all):
     KEYWORDS = {
-        "invoice_type": ["发票类型", "增值税专用发票", "增值税普通发票", "电子普通发票"],
         "invoice_number": ["发票号码"],
         "invoice_date": ["开票日期"],
         "buyer_name": ["购买方名称", "名称"],
@@ -159,6 +182,9 @@ def extract_invoice_info(result_all):
         "税率/征收率": "tax_rate",
         "税额": "tax_amount"
     }
+    INVOICE_TYPE_CANDIDATES = [
+        "增值税专用发票", "增值税普通发票", "电子普通发票", "增值税电子普通发票", "机动车销售统一发票"
+    ]
 
     def group_lines(texts, boxes, y_thresh=15):
         lines = []
@@ -193,27 +219,153 @@ def extract_invoice_info(result_all):
         lines, line_boxes = group_lines(texts, boxes)
 
         invoice_info = {}
+
+        # --- 合计金额兼容拆字，排除价税合计 ---
+        total_amount_line_idx = -1
+        total_amount_y = -1
+        total_amount_value = ""
+        for i, line in enumerate(lines):
+            line_str = "".join(line)
+            # 跳过包含“价税合计”“大写”“小写”的行
+            if any(x in line_str for x in ["价税合计", "大写", "小写"]):
+                continue
+            if "合计" in line_str or "合 计" in line_str or re.search(r"合\s*计", line_str):
+                y_center = np.mean([b[1] + (b[3] - b[1]) / 2 for b in line_boxes[i]])
+                if y_center > total_amount_y:
+                    total_amount_y = y_center
+                    total_amount_line_idx = i
+
+        if total_amount_line_idx != -1:
+            line = lines[total_amount_line_idx]
+            idx = -1
+            for j in range(len(line) - 1):
+                if (line[j] == "合" and line[j + 1] == "计") or \
+                   (line[j] == "合" and re.match(r"\s*", line[j + 1]) and j + 2 < len(line) and line[j + 2] == "计"):
+                    idx = j + 1 if line[j + 1] == "计" else j + 2
+                    break
+            if idx == -1:
+                for j, t in enumerate(line):
+                    if "合计" in t:
+                        idx = j
+                        break
+            if idx != -1 and idx + 1 < len(line):
+                total_amount_value = clean_value(line[idx + 1])
+            elif len(line) > 1:
+                total_amount_value = clean_value(line[-1])
+            else:
+                total_amount_value = ""
+            invoice_info["total_amount"] = total_amount_value
+
+        # --- 合计税额 ---
+        total_tax_value = ""
+        if total_amount_line_idx != -1:
+            line = lines[total_amount_line_idx]
+            line_box = line_boxes[total_amount_line_idx]
+            # 找到“合计”或“合 计”后的位置
+            idx = -1
+            for j in range(len(line) - 1):
+                if (line[j] == "合" and line[j + 1] == "计") or \
+                   (line[j] == "合" and re.match(r"\s*", line[j + 1]) and j + 2 < len(line) and line[j + 2] == "计"):
+                    idx = j + 1 if line[j + 1] == "计" : j + 2
+                    break
+            if idx == -1:
+                for j, t in enumerate(line):
+                    if "合计" in t:
+                        idx = j
+                        break
+            # 合计金额右侧的字段即为合计税额
+            if idx != -1 and idx + 2 < len(line):
+                total_tax_value = clean_value(line[idx + 2])
+            elif idx != -1 and idx + 1 < len(line):
+                total_tax_value = clean_value(line[-1])
+            invoice_info["total_tax"] = total_tax_value
+
+        # 发票类型识别：优先取第一行正中间偏左文本，遍历匹配候选类型
+        invoice_type = ""
+        if lines:
+            first_line = lines[0]
+            n = len(first_line)
+            candidates = []
+            # 优先取正中间偏左和正中间
+            if n >= 2:
+                candidates.append(first_line[n // 2 - 1])
+            if n >= 1:
+                candidates.append(first_line[n // 2])
+            # 再遍历整行
+            candidates += first_line
+            found = False
+            for text in candidates:
+                candidate = text.replace(" ", "").replace("（", "(").replace("）", ")")
+                for t in INVOICE_TYPE_CANDIDATES:
+                    if t in candidate:
+                        invoice_type = t
+                        found = True
+                        break
+                if found:
+                    break
+            if not invoice_type and candidates:
+                invoice_type = candidates[0]
+        invoice_info["invoice_type"] = invoice_type
+
+         # --- 价税合计（小写）兼容处理 ---
+        total_with_tax_num = ""
+        total_with_tax_cn_idx = -1
+        for i, line in enumerate(lines):
+            line_str = "".join(line)
+            if "价税合计" in line_str and "大写" in line_str:
+                total_with_tax_cn_idx = i
+                break
+        if total_with_tax_cn_idx != -1:
+            line = lines[total_with_tax_cn_idx]
+            idx = -1
+            for j, t in enumerate(line):
+                if "价税合计" in t and "大写" in t:
+                    idx = j
+                    break
+            # 取右侧的（小写）或金额
+            if idx != -1:
+                # 查找右侧第一个带“小写”或金额特征的文本
+                for k in range(idx + 1, len(line)):
+                    if "小写" in line[k] or re.search(r"[¥￥]\s*\d", line[k]):
+                        total_with_tax_num = clean_value(line[k])
+                        break
+                # 如果没找到，兜底取最后一个
+                if not total_with_tax_num and len(line) > idx + 1:
+                    total_with_tax_num = clean_value(line[-1])
+        invoice_info["total_with_tax_num"] = total_with_tax_num
+
+        
         item_header = None
         item_header_idx = None
-        # 主表字段识别
         for i, line in enumerate(lines):
             line_str = " ".join(line)
+            line_box = line_boxes[i]
             for field, kws in KEYWORDS.items():
+                # 如果已经有合计金额，后续不再覆盖
                 if field in invoice_info:
                     continue
                 for kw in kws:
                     if kw in line_str:
                         idx = next((j for j, t in enumerate(line) if kw in t), None)
-                        if idx is not None and idx + 1 < len(line):
-                            value = line[idx + 1]
+                        # 合计金额特殊处理：只取“合计”或“合计金额”同一行的下一个文本
+                        if field == "total_amount":
+                            if idx is not None and idx + 1 < len(line):
+                                value = clean_value(line[idx + 1])
+                            else:
+                                # 如果没有下一个，取该行最后一个文本
+                                value = clean_value(line[-1])
+                        elif field in ["buyer_name", "buyer_tax_id"]:
+                            left_idx = np.argmin([b[0] for b in line_box])
+                            value = clean_value(line[left_idx])
+                        elif idx is not None and idx + 1 < len(line):
+                            value = clean_value(line[idx + 1])
                         else:
-                            value = line_str.replace(kw, "").strip()
-                        invoice_info[field] = re.sub(r".*?[:：]", "", value).strip()
+                            value = clean_value(line_str.replace(kw, "").strip())
+                        invoice_info[field] = value
             if not item_header and any(h in line_str for h in ITEM_KEY_MAP.keys()):
                 item_header = line
                 item_header_idx = i
 
-        # 明细表内容识别
         items = []
         if item_header:
             header_fields = [ITEM_KEY_MAP.get(h, h) for h in item_header]
