@@ -128,31 +128,37 @@ def create_invoices_with_pandas(data_list, output_path=None):
     return output_path
 
 def clean_value(val):
-    # 所有常见字段名及其单字、部分、拆分形式
+    # 所有常见字段名及其单字、部分、拆分形式，加入电子发票等
     field_words = [
         "发票号码", "开票日期", "购买方名称", "购买方统一社会信用代码", "购买方纳税人识别号",
         "统一社会信用代码", "纳税人识别号", "销售方名称", "销售方统一社会信用代码", "销售方纳税人识别号",
         "合计金额", "合计税额", "价税合计", "大写", "小写", "金额", "税额", "税率/征收率", "税率",
-        "项目名称", "规格型号", "单位", "数量", "单价", "备注", "开票人"
+        "项目名称", "规格型号", "单位", "数量", "单价", "备注", "开票人",
+        "电子发票（普通发票）", "电子发票普通发票", "电子发票", "普通发票"
     ]
     # 拆分为单字和部分
     field_parts = []
     for w in field_words:
         field_parts.append(w)
         field_parts.extend(list(w))
-        # 也加上前2~4字的部分匹配
         for i in range(2, min(5, len(w))):
             field_parts.append(w[:i])
     # 去重
     field_parts = list(set(field_parts))
-    # 构造正则，允许前面有各种符号、空格、括号、冒号、分号等
-    prefix_pattern = r'^([¥￥\(\)（）\[\]\{\}\s:：;；\-_,，.。/\\]*)(' + '|'.join(map(re.escape, field_parts)) + r')+([¥￥\(\)（）\[\]\{\}\s:：;；\-_,，.。/\\]*)'
+    # 构造正则，允许前面有各种符号、空格、括号、冒号、分号等，也允许单独符号
+    prefix_pattern = (
+        r'^([¥￥\(\)（）\[\]\{\}\s:：;；\-_,，.。/\\]*)'
+        r'(' + '|'.join(map(re.escape, field_parts)) + r')*'
+        r'([¥￥\(\)（）\[\]\{\}\s:：;；\-_,，.。/\\]*)'
+    )
     # 多次去除前缀
     while True:
         new_val = re.sub(prefix_pattern, '', val)
         if new_val == val:
             break
         val = new_val
+    # 最后再去除一次所有前缀符号（防止只剩符号的情况）
+    val = re.sub(r'^[¥￥\(\)（）\[\]\{\}\s:：;；\-_,，.。/\\]+', '', val)
     val = val.strip()
     return val
 
@@ -266,7 +272,7 @@ def extract_invoice_info(result_all):
             for j in range(len(line) - 1):
                 if (line[j] == "合" and line[j + 1] == "计") or \
                    (line[j] == "合" and re.match(r"\s*", line[j + 1]) and j + 2 < len(line) and line[j + 2] == "计"):
-                    idx = j + 1 if line[j + 1] == "计" : j + 2
+                    idx = j + 1 if line[j + 1] == "计" else j + 2
                     break
             if idx == -1:
                 for j, t in enumerate(line):
