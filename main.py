@@ -134,7 +134,7 @@ def clean_value(val):
         "统一社会信用代码", "纳税人识别号", "销售方名称", "销售方统一社会信用代码", "销售方纳税人识别号",
         "合计金额", "合计税额", "价税合计", "大写", "小写", "金额", "税额", "税率/征收率", "税率",
         "项目名称", "规格型号", "单位", "数量", "单价", "备注", "开票人",
-        "电子发票（普通发票）", "电子发票普通发票", "电子发票", "普通发票"
+        "电子发票（普通发票）", "电子发票普通发票", "电子发票", "普通发票","国家税务总局"
     ]
     # 拆分为单字和部分
     field_parts = []
@@ -374,13 +374,53 @@ def extract_invoice_info(result_all):
 
         items = []
         if item_header:
+            # 1. 计算每一列的x中心
+            header_boxes = line_boxes[item_header_idx]
+            col_centers = [((b[0] + b[2]) / 2) for b in header_boxes]
             header_fields = [ITEM_KEY_MAP.get(h, h) for h in item_header]
-            for line in lines[item_header_idx + 1:]:
+            header_len = len(header_fields)
+            for line, boxes in zip(lines[item_header_idx + 1:], line_boxes[item_header_idx + 1:]):
                 line_str = " ".join(line)
+                # 跳过合计、价税合计、备注、开票人等行
                 if any(x in line_str for x in ["合计", "价税合计", "备注", "开票人"]):
                     continue
-                cells = line + [''] * (len(header_fields) - len(line))
-                item = {header_fields[j]: cells[j] for j in range(len(header_fields))}
+                # 2. 按x坐标将每个cell归入最近的表头
+                row_cells = [''] * header_len
+                for cell, box in zip(line, boxes):
+                    cell_center = (box[0] + box[2]) / 2
+                    col_idx = np.argmin([abs(cell_center - c) for c in col_centers])
+                    # 若该列已有内容，合并（防止误归并）
+                    if row_cells[col_idx]:
+                        row_cells[col_idx] += " " + cell
+                    else:
+                        row_cells[col_idx] = cell
+
+                # === 新增：数量和单价拆分 ===
+                try:
+                    idx_quantity = header_fields.index("quantity")
+                    idx_unit_price = header_fields.index("unit_price")
+                    val = row_cells[idx_quantity]
+                    # 匹配“数字 空格 数字/小数”或“数字\t数字”
+                    m = re.match(r'^\s*(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$', val)
+                    if m:
+                        row_cells[idx_quantity] = m.group(1)
+                        row_cells[idx_unit_price] = m.group(2)
+                except Exception:
+                    pass
+                try:
+                    idx_quantity = header_fields.index("quantity")
+                    idx_unit_price = header_fields.index("unit_price")
+                    val = row_cells[idx_unit_price]
+                    # 匹配“数字 空格 数字/小数”或“数字\t数字”
+                    m = re.match(r'^\s*(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$', val)
+                    if m:
+                        row_cells[idx_quantity] = m.group(1)
+                        row_cells[idx_unit_price] = m.group(2)
+                except Exception:
+                    pass
+
+                # 3. 构造 item，字段名与表头一一对应
+                item = {header_fields[j]: clean_value(row_cells[j]) for j in range(header_len)}
                 items.append(item)
         invoice_info["items"] = items
         results.append(invoice_info)
