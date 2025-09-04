@@ -23,4 +23,6 @@
 ```bash
 sh build.sh
 ```
-访问地址：http://localhost/fapiao
+体验地址：http://zhiwei3306.com/fapiao
+本地访问地址：http://localhost/fapiao
+
