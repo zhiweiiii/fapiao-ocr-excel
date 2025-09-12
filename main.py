@@ -1,4 +1,7 @@
 import logging
+import socket
+import time
+from datetime import datetime
 
 import numpy
 from PIL import Image
@@ -11,13 +14,55 @@ import uuid
 import numpy as np
 import re
 import pandas as pd
-from datetime import datetime
 
 from thread_single import PaddleOCRModelManager
 
-logging.getLogger('werkzeug').disabled = True
+# 配置日志
+logging.basicConfig(level=logging.INFO, 
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 app = Flask(__name__)
+app.logger.setLevel(logging.INFO)
 
+# 配置socket超时
+socket.setdefaulttimeout(600)  # 设置默认socket超时为10分钟
+
+# 添加请求处理时间记录的中间件
+@app.before_request
+def before_request():
+    request.start_time = time.time()
+    app.logger.info(f"收到请求: {request.path} 来源: {request.remote_addr}")
+
+@app.after_request
+def after_request(response):
+    processing_time = time.time() - request.start_time
+    app.logger.info(f"处理请求: {request.path} 状态码: {response.status_code} 耗时: {processing_time:.2f}秒")
+    return response
+
+# 添加全局异常处理
+@app.errorhandler(Exception)
+def handle_exception(e):
+    if isinstance(e, socket.timeout):
+        app.logger.error(f"连接超时: {str(e)} 来源: {request.remote_addr}")
+    elif isinstance(e, ConnectionResetError):
+        app.logger.warning(f"连接被重置: {str(e)} 来源: {request.remote_addr}")
+    else:
+        app.logger.error(f"处理请求时发生异常: {str(e)} 来源: {request.remote_addr}")
+    return "Internal Server Error", 500
+
+# 限制最大请求大小
+app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024  # 64MB
+
+# 超时检测装饰器
+def timeout_check(func):
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        processing_time = time.time() - start_time
+        if processing_time > 600:  # 如果处理时间超过30秒，记录警告
+            app.logger.warning(f"请求 {request.path} 处理时间过长: {processing_time:.2f}秒 来源: {request.remote_addr}")
+        return result
+    wrapper.__name__ = func.__name__
+    return wrapper
 
 def file_storage_to_ndarray(file_storage):
     file_storage.stream.seek(0)
@@ -29,6 +74,7 @@ def file_storage_to_ndarray(file_storage):
 
 # 定义路由和视图函数
 @app.route('/ocr', methods=['GET'])
+@timeout_check
 def ocr():
     app.logger.info("开始")
     ### 使用url
@@ -427,6 +473,7 @@ def extract_invoice_info(result_all):
     return results
 # 定义路由和视图函数
 @app.route('/ocr_excel', methods=['POST'])
+@timeout_check
 def ocr_excel():
     app.logger.info("开始")
     filelist = request.files.getlist('img_file')
