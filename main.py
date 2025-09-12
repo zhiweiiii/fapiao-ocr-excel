@@ -72,6 +72,22 @@ def file_storage_to_ndarray(file_storage):
     return numpy.array(img)  # 自动生成dtype=uint8
 
 
+# 添加请求路径过滤中间件
+@app.before_request
+def filter_request_paths():
+    # 定义允许访问的业务接口路径
+    allowed_paths = ['/ocr', '/ocr_excel', '/fapiao']
+    
+    # 获取当前请求路径
+    current_path = request.path
+    
+    # 检查是否为允许的业务接口路径
+    if current_path not in allowed_paths:
+        app.logger.warning(f"屏蔽非业务接口请求: {current_path} 来源: {request.remote_addr}")
+        # 返回404状态码和错误消息
+        return "Not Found", 404
+
+
 # 定义路由和视图函数
 @app.route('/ocr', methods=['GET'])
 @timeout_check
@@ -471,7 +487,6 @@ def extract_invoice_info(result_all):
         invoice_info["items"] = items
         results.append(invoice_info)
     return results
-# 定义路由和视图函数
 @app.route('/ocr_excel', methods=['POST'])
 @timeout_check
 def ocr_excel():
