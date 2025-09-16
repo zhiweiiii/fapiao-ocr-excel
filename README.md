@@ -24,7 +24,7 @@
 sh build.sh
 ```
 体验地址：http://zhiwei3306.com/fapiao
-本地访问地址：http://localhost:82/fapiao
+本地访问地址：http://localhost/fapiao
 
 目前只测试了标准的发票文件，对于手拍的文件或者其他文件，暂未测试过
 未来如果有提供数据的，可以尝试进一步优化
