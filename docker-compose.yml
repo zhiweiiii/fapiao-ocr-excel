@@ -4,8 +4,11 @@ services:
     image: paddleocr-my:v1
     container_name: ocr
     ports:
-      - "80:80"
+      - "80:82"
 #    restart: always
     environment:
       TZ: "Asia/Shanghai"
-
+networks:
+  default:
+    external: true
+    name: nginx_default
