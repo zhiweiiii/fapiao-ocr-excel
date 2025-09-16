@@ -527,4 +527,4 @@ def fapiao():
 if __name__ == '__main__':
     paddleocr = PaddleOCRModelManager(app)
     app.logger.setLevel(logging.INFO)
-    app.run(host="0.0.0.0", port=80)
+    app.run(host="0.0.0.0", port=82)

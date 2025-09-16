@@ -6,6 +6,6 @@ COPY requirements.txt requirements.txt
 RUN pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 COPY . .
 RUN chmod +x main.py
-EXPOSE 80
+EXPOSE 82
 CMD ["python", "main.py"]
 
