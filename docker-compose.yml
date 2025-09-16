@@ -4,7 +4,7 @@ services:
     image: paddleocr-my:v1
     container_name: ocr
     ports:
-      - "80:80"
+      - "82:82"
 #    restart: always
     environment:
       TZ: "Asia/Shanghai"
