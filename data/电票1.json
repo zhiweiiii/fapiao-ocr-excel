@@ -1,0 +1,27 @@
+{
+"invoice_type": "电子发票（普通发票）",
+"invoice_number": "20882407041644048604",
+"invoice_date": "2024年07月04日",
+"buyer_name": "杭州常威商业管理有限公司",
+"buyer_tax_id": "TEST23232",
+"seller_name": "杭州爱信诺航天信息有限公司(新模式开票)",
+"seller_tax_id": "339901999999142",
+"total_amount": "0.02",
+"total_tax": "0.00",
+"total_with_tax_cn": "贰分",
+"total_with_tax_num": "0.02",
+"remark": "",
+"issuer": "测试人",
+"items":[
+    {
+    "product_name": "*融资租赁*固定租金",
+    "specification": "",
+    "unit": "",
+    "quantity": "1",
+    "unit_price": "0.0183486238532",
+    "amount": "0.02",
+    "tax_rate": "9%",
+    "tax_amount": "0.00"
+  }
+]
+}

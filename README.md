@@ -2,11 +2,11 @@
 
 本项目是一个基于 PaddleOCR 的自动识别发票内容，导出Excel。
 
-![alt text](image.png)
-![alt text](image-1.png)
-![alt text](image-2.png)
-![alt text](image-3.png)
-![alt text](image-4.png)
+![alt text](img/image.png)
+![alt text](img/image-1.png)
+![alt text](img/image-2.png)
+![alt text](img/image-3.png)
+![alt text](img/image-4.png)
 ## 功能特点
 - **发票 OCR 识别**：利用 PaddleOCR 技术，实现对发票图片（jpg、png、pdf等）的文字识别，支持多种发票类型。
 - **数据清洗**：对识别出的文字进行清洗，去除噪声和异常值，确保数据质量。
@@ -32,4 +32,4 @@ sh build.sh
 
 目前使用的服务器性能有限，所以处理速度较慢，一个文件10s左右，请耐心等待
 欢迎交流
-![alt text](pubapp.png)
+![alt text](img/pubapp.png)
