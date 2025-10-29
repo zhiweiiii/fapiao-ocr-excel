@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List
 
 from openpyxl import load_workbook
+import logging
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import importlib.util
