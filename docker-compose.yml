@@ -8,15 +8,6 @@ services:
 #    restart: always
     environment:
       TZ: "Asia/Shanghai"
-  test:
-    image: paddleocr-my:v1
-    container_name: ocr_test
-    volumes:
-      - .:/app
-    working_dir: /app
-    command: ["python", "tests/test_data_case.py"]
-    depends_on:
-      - ocr
 networks:
   default:
     external: true

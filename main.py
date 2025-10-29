@@ -97,35 +97,37 @@ def ocr():
         result,_ = paddleocr.submit_ocr(input=img_url)
     return result
 
-def create_invoices_with_pandas(data_list, output_path=None):
-   
+# 导出供外部复用的Excel字段映射
+MAIN_FIELD_MAP = {
+    "invoice_type": "发票类型",
+    "invoice_number": "发票号码",
+    "invoice_date": "开票日期",
+    "buyer_name": "购买方名称",
+    "buyer_tax_id": "购买方统一社会信用代码/纳税人识别号",
+    "seller_name": "销售方名称",
+    "seller_tax_id": "销售方统一社会信用代码/纳税人识别号",
+    "total_amount": "合计金额",
+    "total_tax": "合计税额",
+    "total_with_tax_cn": "价税合计（大写）",
+    "total_with_tax_num": "价税合计（小写）",
+    "remark": "备注",
+    "issuer": "开票人"
+}
+DETAIL_FIELD_MAP = {
+    "product_name": "项目名称",
+    "specification": "规格型号",
+    "unit": "单位",
+    "quantity": "数量",
+    "unit_price": "单价",
+    "amount": "金额",
+    "tax_rate": "税率/征收率",
+    "tax_amount": "税额"
+}
 
-    main_field_map = {
-        "invoice_type": "发票类型",
-        "invoice_number": "发票号码",
-        "invoice_date": "开票日期",
-        "buyer_name": "购买方名称",
-        "buyer_tax_id": "购买方统一社会信用代码/纳税人识别号",
-        "seller_name": "销售方名称",
-        "seller_tax_id": "销售方统一社会信用代码/纳税人识别号",
-        "total_amount": "合计金额",
-        "total_tax": "合计税额",
-        "total_with_tax_cn": "价税合计（大写）",
-        "total_with_tax_num": "价税合计（小写）",
-        "remark": "备注",
-        "issuer": "开票人"
-    }
-    # 明细表字段映射，按你的要求补全
-    detail_field_map = {
-        "product_name": "项目名称",
-        "specification": "规格型号",
-        "unit": "单位",
-        "quantity": "数量",
-        "unit_price": "单价",
-        "amount": "金额",
-        "tax_rate": "税率/征收率",
-        "tax_amount": "税额"
-    }
+def create_invoices_with_pandas(data_list, output_path=None):
+    # 复用模块级映射，避免测试重复维护
+    main_field_map = MAIN_FIELD_MAP
+    detail_field_map = DETAIL_FIELD_MAP
 
     if output_path is None:
         output_path = f"发票批量导出_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
@@ -173,6 +175,33 @@ def create_invoices_with_pandas(data_list, output_path=None):
         raise
     return output_path
 
+# 提供给外部复用的字段映射常量（原先在 extract_invoice_info 内部）
+KEYWORDS = {
+    "invoice_number": ["发票号码"],
+    "invoice_date": ["开票日期"],
+    "buyer_name": ["购买方名称", "名称"],
+    "buyer_tax_id": ["购买方统一社会信用代码", "购买方纳税人识别号", "统一社会信用代码", "纳税人识别号"],
+    "seller_name": ["销售方名称", "名称"],
+    "seller_tax_id": ["销售方统一社会信用代码", "销售方纳税人识别号", "统一社会信用代码", "纳税人识别号"],
+    "total_amount": ["合计金额"],
+    "total_tax": ["合计税额"],
+    "total_with_tax_cn": ["价税合计", "大写"],
+    "total_with_tax_num": ["价税合计", "小写"],
+    "remark": ["备注"],
+    "issuer": ["开票人"]
+}
+ITEM_KEY_MAP = {
+    "项目名称": "product_name",
+    "规格型号": "specification",
+    "单位": "unit",
+    "数量": "quantity",
+    "单价": "unit_price",
+    "金额": "amount",
+    "税率": "tax_rate",
+    "税率/征收率": "tax_rate",
+    "税额": "tax_amount"
+}
+
 def clean_value(val):
     # 所有常见字段名及其单字、部分、拆分形式，加入电子发票等
     field_words = [
@@ -209,31 +238,8 @@ def clean_value(val):
     return val
 
 def extract_invoice_info(result_all):
-    KEYWORDS = {
-        "invoice_number": ["发票号码"],
-        "invoice_date": ["开票日期"],
-        "buyer_name": ["购买方名称", "名称"],
-        "buyer_tax_id": ["购买方统一社会信用代码", "购买方纳税人识别号", "统一社会信用代码", "纳税人识别号"],
-        "seller_name": ["销售方名称", "名称"],
-        "seller_tax_id": ["销售方统一社会信用代码", "销售方纳税人识别号", "统一社会信用代码", "纳税人识别号"],
-        "total_amount": ["合计金额"],
-        "total_tax": ["合计税额"],
-        "total_with_tax_cn": ["价税合计", "大写"],
-        "total_with_tax_num": ["价税合计", "小写"],
-        "remark": ["备注"],
-        "issuer": ["开票人"]
-    }
-    ITEM_KEY_MAP = {
-        "项目名称": "product_name",
-        "规格型号": "specification",
-        "单位": "unit",
-        "数量": "quantity",
-        "单价": "unit_price",
-        "金额": "amount",
-        "税率": "tax_rate",
-        "税率/征收率": "tax_rate",
-        "税额": "tax_amount"
-    }
+    # 使用模块级常量 KEYWORDS 和 ITEM_KEY_MAP（原本在函数内定义）
+    global KEYWORDS, ITEM_KEY_MAP
     INVOICE_TYPE_CANDIDATES = [
         "增值税专用发票", "增值税普通发票", "电子普通发票", "增值税电子普通发票", "机动车销售统一发票"
     ]
@@ -507,8 +513,9 @@ def fapiao():
 
 
 
-# 启动应用
+# 启动应用（保留入口的一行测试调用，然后启动服务）
 if __name__ == '__main__':
     paddleocr = PaddleOCRModelManager(app)
     app.logger.setLevel(logging.INFO)
+    __import__('tests.test_data_case').test_data_case.run_all_tests()
     app.run(host="0.0.0.0", port=80)
