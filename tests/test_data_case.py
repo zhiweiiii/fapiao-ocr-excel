@@ -4,9 +4,14 @@ from pathlib import Path
 from typing import List
 
 from openpyxl import load_workbook
-
-# 直接使用项目内的函数，无需启动服务
-from main import create_invoices_with_pandas
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import importlib.util
+MAIN_PATH = Path(__file__).resolve().parent.parent / 'main.py'
+spec = importlib.util.spec_from_file_location("main", MAIN_PATH)
+main_mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(main_mod)
+create_invoices_with_pandas = getattr(main_mod, 'create_invoices_with_pandas')
 
 DATA_DIR = Path(__file__).resolve().parent.parent / 'data'
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / 'output'
