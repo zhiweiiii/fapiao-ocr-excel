@@ -124,26 +124,10 @@ def run_case(pdf_path: Path, json_path: Path, paddleocr_manager) -> Dict[str, An
 
     # Use external injected PaddleOCRModelManager to run OCR on the PDF
     _, result_all = paddleocr_manager.submit_ocr(input=str(pdf_path))
-    # 调试打印 result_all 内容
-    print('[调试] result_all 类型:', type(result_all))
-    if isinstance(result_all, list):
-        print(f'[调试] result_all 页数: {len(result_all)}')
-        for i, page in enumerate(result_all):
-            print(f'[调试] 第 {i+1} 页 - rec_texts 数量: {len(page.get("rec_texts", []))}')
-            if page.get("rec_texts"):
-                print(f'[调试] 第 {i+1} 页首行文本: {page["rec_texts"][:3]}...')
-    
+   
     # Use main.extract_invoice_info to structure OCR outputs
     extracted_list = main_mod.extract_invoice_info(result_all)
-    # 调试打印 extracted_list 内容
-    print('[调试] extracted_list 类型:', type(extracted_list))
-    if isinstance(extracted_list, list):
-        print(f'[调试] extracted_list 发票数量: {len(extracted_list)}')
-        for i, invoice in enumerate(extracted_list):
-            print(f'[调试] 第 {i+1} 张发票 - 主表字段: {list(invoice.keys()) if isinstance(invoice, dict) else "N/A"}')
-            if isinstance(invoice, dict) and 'items' in invoice:
-                print(f'[调试] 第 {i+1} 张发票 - 明细行数: {len(invoice["items"])}')
-   
+    
     result_main, result_items = merge_extracted_results(extracted_list)
 
     # 使用更健壮的逻辑获取真值结构：兼容顶层字段或 main/items 嵌套

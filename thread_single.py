@@ -55,6 +55,7 @@ class PaddleOCRModelManager(ThreadPoolExecutor):
             processing_time = time.time() - start_time
             self.logger.info(f"OCR推理完成，处理时间: {processing_time:.2f}秒")
             result = self.print_order_no(result_str)
+            self.logger.info(f"OCR推理结果: {result}")
             return result, result_str
         except Exception as e:
             self.logger.error(f"OCR推理异常: {str(e)}")
