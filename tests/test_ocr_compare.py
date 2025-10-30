@@ -158,38 +158,38 @@ def run_case(pdf_path: Path, json_path: Path, paddleocr_manager) -> Dict[str, An
 def run_all_tests(data_dir: Path = ROOT / 'data', paddleocr_manager=None) -> None:
     pairs = find_pdf_json_pairs(data_dir)
     if not pairs:
-        print(f'[WARN] No PDF/JSON pairs found in {data_dir}')
+        print(f'[警告] 在 {data_dir} 未找到 PDF/JSON 配对')
         return
 
     overall_rec_sum = 0.0
     overall_acc_sum = 0.0
 
-    print(f'[INFO] Found {len(pairs)} case(s)')
+    print(f'[信息] 发现 {len(pairs)} 个用例')
     for pdf_path, json_path in pairs:
         stats = run_case(pdf_path, json_path, paddleocr_manager)
-        print('\n=== Case ===')
-        print(f'PDF: {stats["pdf"]}')
-        print(f'JSON: {stats["json"]}')
-        print(f'Main: recognition={stats["main"]["recognition_rate"]:.3f}, accuracy={stats["main"]["accuracy_rate"]:.3f}, total={stats["main"]["total"]}')
-        print(f'Items: recognition={stats["items"]["recognition_rate"]:.3f}, accuracy={stats["items"]["accuracy_rate"]:.3f}, total={stats["items"]["total"]}')
-        print(f'Overall: recognition={stats["overall_recognition"]:.3f}, accuracy={stats["overall_accuracy"]:.3f}')
+        print('\n=== 用例 ===')
+        print(f'PDF 文件: {stats["pdf"]}')
+        print(f'JSON 文件: {stats["json"]}')
+        print(f'主表：识别率={stats["main"]["recognition_rate"]:.3f}, 准确率={stats["main"]["accuracy_rate"]:.3f}, 总字段={stats["main"]["total"]}')
+        print(f'明细：识别率={stats["items"]["recognition_rate"]:.3f}, 准确率={stats["items"]["accuracy_rate"]:.3f}, 总字段={stats["items"]["total"]}')
+        print(f'总体：识别率={stats["overall_recognition"]:.3f}, 准确率={stats["overall_accuracy"]:.3f}')
 
         # Show up to 10 mismatches for quick inspection
         mm_main = stats['main']['mismatches'][:10]
         mm_items = stats['items']['mismatches'][:10]
         if mm_main:
-            print('[MISMATCH][MAIN] sample:')
+            print('[不匹配][主表] 示例:')
             for mm in mm_main:
-                print(f" - {mm['field']}: result='{mm['result']}' | truth='{mm['truth']}'")
+                print(f" - {mm['field']}: 识别='{mm['result']}' | 真值='{mm['truth']}'")
         if mm_items:
-            print('[MISMATCH][ITEMS] sample:')
+            print('[不匹配][明细] 示例:')
             for mm in mm_items:
-                print(f" - row {mm['row']} {mm['field']}: result='{mm['result']}' | truth='{mm['truth']}'")
+                print(f" - 第 {mm['row']} 行 {mm['field']}: 识别='{mm['result']}' | 真值='{mm['truth']}'")
 
         overall_rec_sum += stats['overall_recognition']
         overall_acc_sum += stats['overall_accuracy']
 
     n = len(pairs)
-    print('\n=== Summary ===')
-    print(f'Average overall recognition: {overall_rec_sum / n:.3f}')
-    print(f'Average overall accuracy: {overall_acc_sum / n:.3f}')
+    print('\n=== 汇总 ===')
+    print(f'平均总体识别率: {overall_rec_sum / n:.3f}')
+    print(f'平均总体准确率: {overall_acc_sum / n:.3f}')
