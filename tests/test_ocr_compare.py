@@ -167,6 +167,8 @@ def run_all_tests(data_dir: Path = ROOT / 'data', paddleocr_manager=None) -> Non
     print(f'[信息] 发现 {len(pairs)} 个用例')
     for pdf_path, json_path in pairs:
         stats = run_case(pdf_path, json_path, paddleocr_manager)
+        print('[调试] 完整 stats:')
+        print(json.dumps(stats, ensure_ascii=False, indent=2))
         print('\n=== 用例 ===')
         print(f'PDF 文件: {stats["pdf"]}')
         print(f'JSON 文件: {stats["json"]}')
