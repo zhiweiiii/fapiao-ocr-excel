@@ -245,30 +245,55 @@ def extract_invoice_info(result_all):
     ]
 
     def group_lines(texts, boxes, y_thresh=15):
-        lines = []
-        line_boxes = []
+        """按照 thread_single.py 的思路重构分行逻辑：基于行高判断换行"""
+        # 1. 按y坐标排序
         cy_list = [((b[1] + b[3]) / 2) for b in boxes]
         idx_sorted = np.argsort(cy_list)
-        used = set()
+        
+        lines = []
+        line_boxes = []
+        
+        if not idx_sorted:
+            return lines, line_boxes
+            
+        # 2. 计算平均行高作为换行阈值
+        heights = [b[3] - b[1] for b in boxes]
+        avg_height = np.mean(heights) if heights else 15
+        line_height_threshold = avg_height * 0.95  # 使用95%行高作为换行阈值
+        
+        # 3. 按y坐标分组
+        current_line = []
+        current_boxes = []
+        current_y = cy_list[idx_sorted[0]]
+        
         for idx in idx_sorted:
-            if idx in used:
-                continue
-            cur_y = cy_list[idx]
-            cur_line = [texts[idx]]
-            cur_boxes = [boxes[idx]]
-            used.add(idx)
-            for j in idx_sorted:
-                if j in used:
-                    continue
-                if abs(cy_list[j] - cur_y) < y_thresh:
-                    cur_line.append(texts[j])
-                    cur_boxes.append(boxes[j])
-                    used.add(j)
-            x_sorted = np.argsort([((b[0] + b[2]) / 2) for b in cur_boxes])
-            lines.append([cur_line[i] for i in x_sorted])
-            line_boxes.append([cur_boxes[i] for i in x_sorted])
-        y_sorted = np.argsort([np.mean([b[1] for b in line[1]]) for line in zip(lines, line_boxes)])
-        return [lines[i] for i in y_sorted], [line_boxes[i] for i in y_sorted]
+            y_center = cy_list[idx]
+            
+            # 判断是否换行：y坐标差大于行高阈值
+            if abs(y_center - current_y) > line_height_threshold:
+                # 换行，保存当前行
+                if current_line:
+                    # 按x坐标排序当前行
+                    x_sorted = np.argsort([((b[0] + b[2]) / 2) for b in current_boxes])
+                    lines.append([current_line[i] for i in x_sorted])
+                    line_boxes.append([current_boxes[i] for i in x_sorted])
+                
+                # 开始新行
+                current_line = [texts[idx]]
+                current_boxes = [boxes[idx]]
+                current_y = y_center
+            else:
+                # 同一行，添加到当前行
+                current_line.append(texts[idx])
+                current_boxes.append(boxes[idx])
+        
+        # 处理最后一行
+        if current_line:
+            x_sorted = np.argsort([((b[0] + b[2]) / 2) for b in current_boxes])
+            lines.append([current_line[i] for i in x_sorted])
+            line_boxes.append([current_boxes[i] for i in x_sorted])
+        
+        return lines, line_boxes
 
     results = []
     for result in result_all:
