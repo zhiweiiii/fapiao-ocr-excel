@@ -99,6 +99,24 @@ def compute_items_accuracy(result_items: List[Dict[str, Any]], truth_items: List
     }
 
 
+def merge_extracted_results(extracted: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    agg_main: Dict[str, Any] = {}
+    agg_items: List[Dict[str, Any]] = []
+    for inv in extracted:
+        # Merge items by concatenation
+        items = inv.get('items')
+        if isinstance(items, list):
+            agg_items.extend(items)
+        # Prefer first non-empty value per field for main fields
+        for k, v in inv.items():
+            if k == 'items':
+                continue
+            if (k not in agg_main) or (agg_main.get(k) is None) or (str(agg_main.get(k)).strip() == ''):
+                if v is not None and str(v).strip() != '':
+                    agg_main[k] = v
+    return agg_main, agg_items
+
+
 def run_case(pdf_path: Path, json_path: Path, paddleocr_manager) -> Dict[str, Any]:
     with json_path.open('r', encoding='utf-8') as f:
         truth = json.load(f)
@@ -107,9 +125,8 @@ def run_case(pdf_path: Path, json_path: Path, paddleocr_manager) -> Dict[str, An
     _, result_all = paddleocr_manager.submit_ocr(input=str(pdf_path))
 
     # Use main.extract_invoice_info to structure OCR outputs
-    result = main_mod.extract_invoice_info(result_all)
-    result_main = result.get('main', {})
-    result_items = result.get('items', [])
+    extracted_list = main_mod.extract_invoice_info(result_all)
+    result_main, result_items = merge_extracted_results(extracted_list)
 
     truth_main = truth.get('main', {})
     truth_items = truth.get('items', [])
