@@ -498,9 +498,6 @@ def ocr_excel():
         p=[]
         for index, result in enumerate(result_all):
             p.append({"rec_texts":result["rec_texts"], "rec_boxes":result["rec_boxes"]})
-        # 调试打印 p 的内容
-        print('[调试] p 的内容:', json.dumps(p, ensure_ascii=False, indent=2))
-    
         ocr_fp_list=extract_invoice_info(result_all)
         print(ocr_fp_list)
         temp_path = create_invoices_with_pandas(ocr_fp_list)

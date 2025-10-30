@@ -123,9 +123,12 @@ def run_case(pdf_path: Path, json_path: Path, paddleocr_manager) -> Dict[str, An
 
     # Use external injected PaddleOCRModelManager to run OCR on the PDF
     _, result_all = paddleocr_manager.submit_ocr(input=str(pdf_path))
-
+    print('[调试] result_all 的内容:', json.dumps(result_all, ensure_ascii=False, indent=2))
+    
     # Use main.extract_invoice_info to structure OCR outputs
     extracted_list = main_mod.extract_invoice_info(result_all)
+    print('[调试] extracted_list 的内容:', json.dumps(extracted_list, ensure_ascii=False, indent=2))
+    
     result_main, result_items = merge_extracted_results(extracted_list)
 
     # 使用更健壮的逻辑获取真值结构：兼容顶层字段或 main/items 嵌套
@@ -168,8 +171,6 @@ def run_all_tests(data_dir: Path = ROOT / 'data', paddleocr_manager=None) -> Non
     print(f'[信息] 发现 {len(pairs)} 个用例')
     for pdf_path, json_path in pairs:
         stats = run_case(pdf_path, json_path, paddleocr_manager)
-        print('[调试] 完整 stats:')
-        print(json.dumps(stats, ensure_ascii=False, indent=2))
         print('\n=== 用例 ===')
         print(f'PDF 文件: {stats["pdf"]}')
         print(f'JSON 文件: {stats["json"]}')
