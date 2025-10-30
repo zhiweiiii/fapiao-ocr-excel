@@ -3,6 +3,7 @@ import sys
 import json
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
+import numpy as np
 
 # Ensure project root is on path
 ROOT = Path(__file__).resolve().parents[1]
@@ -123,11 +124,11 @@ def run_case(pdf_path: Path, json_path: Path, paddleocr_manager) -> Dict[str, An
 
     # Use external injected PaddleOCRModelManager to run OCR on the PDF
     _, result_all = paddleocr_manager.submit_ocr(input=str(pdf_path))
-    print('[调试] result_all 的内容:', json.dumps(result_all, ensure_ascii=False, indent=2))
+    print('[调试] result_all 的内容:', json.dumps(to_json_safe(result_all), ensure_ascii=False, indent=2))
     
     # Use main.extract_invoice_info to structure OCR outputs
     extracted_list = main_mod.extract_invoice_info(result_all)
-    print('[调试] extracted_list 的内容:', json.dumps(extracted_list, ensure_ascii=False, indent=2))
+    print('[调试] extracted_list 的内容:', json.dumps(to_json_safe(extracted_list), ensure_ascii=False, indent=2))
     
     result_main, result_items = merge_extracted_results(extracted_list)
 
@@ -197,3 +198,16 @@ def run_all_tests(data_dir: Path = ROOT / 'data', paddleocr_manager=None) -> Non
     print('\n=== 汇总 ===')
     print(f'平均总体识别率: {overall_rec_sum / n:.3f}')
     print(f'平均总体准确率: {overall_acc_sum / n:.3f}')
+
+
+# 将包含 numpy 类型的数据转换为可 JSON 序列化的结构
+def to_json_safe(obj):
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, np.generic):  # 如 np.int64, np.float32
+        return obj.item()
+    if isinstance(obj, dict):
+        return {k: to_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [to_json_safe(x) for x in obj]
+    return obj
