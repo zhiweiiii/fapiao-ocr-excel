@@ -208,6 +208,12 @@ def to_json_safe(obj):
         return obj.item()
     if isinstance(obj, dict):
         return {k: to_json_safe(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
+    if isinstance(obj, (list, tuple, set)):
         return [to_json_safe(x) for x in obj]
-    return obj
+    if isinstance(obj, (str, int, float, bool)) or obj is None:
+        return obj
+    # 兜底：无法序列化的对象转为字符串表示，避免 json.dumps 报错
+    try:
+        return str(obj)
+    except Exception:
+        return f"<unserializable {type(obj).__name__}>"
