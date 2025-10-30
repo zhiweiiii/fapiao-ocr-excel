@@ -471,8 +471,11 @@ def extract_invoice_info(result_all):
                 except Exception:
                     pass
 
-                # 3. 构造 item，字段名与表头一一对应
-                item = {header_fields[j]: clean_value(row_cells[j]) for j in range(header_len)}
+                # 3. 构造 item，字段名与表头一一对应；过滤全空行
+                item_values = [clean_value(row_cells[j]) for j in range(header_len)]
+                if all(v == '' for v in item_values):
+                    continue
+                item = {header_fields[j]: item_values[j] for j in range(header_len)}
                 items.append(item)
         invoice_info["items"] = items
         results.append(invoice_info)
@@ -495,6 +498,9 @@ def ocr_excel():
         p=[]
         for index, result in enumerate(result_all):
             p.append({"rec_texts":result["rec_texts"], "rec_boxes":result["rec_boxes"]})
+        # 调试打印 p 的内容
+        print('[调试] p 的内容:', json.dumps(p, ensure_ascii=False, indent=2))
+    
         ocr_fp_list=extract_invoice_info(result_all)
         print(ocr_fp_list)
         temp_path = create_invoices_with_pandas(ocr_fp_list)
