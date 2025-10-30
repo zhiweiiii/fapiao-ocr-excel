@@ -10,7 +10,6 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import main as main_mod
-from thread_single import PaddleOCRModelManager
 
 # Reuse mappings from main.py to keep fields in sync
 KEYWORDS: Dict[str, List[str]] = getattr(main_mod, 'KEYWORDS')
@@ -100,15 +99,15 @@ def compute_items_accuracy(result_items: List[Dict[str, Any]], truth_items: List
     }
 
 
-def run_case(pdf_path: Path, json_path: Path) -> Dict[str, Any]:
+def run_case(pdf_path: Path, json_path: Path, paddleocr_manager) -> Dict[str, Any]:
     with json_path.open('r', encoding='utf-8') as f:
         truth = json.load(f)
 
-    model_manager = PaddleOCRModelManager()
-    image_list = model_manager.read_pdf(pdf_path)
+    # Use external injected PaddleOCRModelManager to run OCR on the PDF
+    _, result_all = paddleocr_manager.submit_ocr(input=str(pdf_path))
 
     # Use main.extract_invoice_info to structure OCR outputs
-    result = main_mod.extract_invoice_info(image_list)
+    result = main_mod.extract_invoice_info(result_all)
     result_main = result.get('main', {})
     result_items = result.get('items', [])
 
@@ -139,7 +138,7 @@ def run_case(pdf_path: Path, json_path: Path) -> Dict[str, Any]:
     }
 
 
-def run_all_tests(data_dir: Path = ROOT / 'data') -> None:
+def run_all_tests(data_dir: Path = ROOT / 'data', paddleocr_manager=None) -> None:
     pairs = find_pdf_json_pairs(data_dir)
     if not pairs:
         print(f'[WARN] No PDF/JSON pairs found in {data_dir}')
@@ -150,7 +149,7 @@ def run_all_tests(data_dir: Path = ROOT / 'data') -> None:
 
     print(f'[INFO] Found {len(pairs)} case(s)')
     for pdf_path, json_path in pairs:
-        stats = run_case(pdf_path, json_path)
+        stats = run_case(pdf_path, json_path, paddleocr_manager)
         print('\n=== Case ===')
         print(f'PDF: {stats["pdf"]}')
         print(f'JSON: {stats["json"]}')
@@ -177,7 +176,3 @@ def run_all_tests(data_dir: Path = ROOT / 'data') -> None:
     print('\n=== Summary ===')
     print(f'Average overall recognition: {overall_rec_sum / n:.3f}')
     print(f'Average overall accuracy: {overall_acc_sum / n:.3f}')
-
-
-if __name__ == '__main__':
-    run_all_tests()

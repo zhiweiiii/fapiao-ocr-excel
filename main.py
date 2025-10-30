@@ -517,5 +517,5 @@ def fapiao():
 if __name__ == '__main__':
     paddleocr = PaddleOCRModelManager(app)
     app.logger.setLevel(logging.INFO)
-    __import__('tests.test_ocr_compare').test_ocr_compare.run_all_tests()
+    __import__('tests.test_ocr_compare').test_ocr_compare.run_all_tests(paddleocr_manager=paddleocr)
     app.run(host="0.0.0.0", port=80)
