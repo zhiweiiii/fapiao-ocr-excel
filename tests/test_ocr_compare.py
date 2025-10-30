@@ -128,8 +128,9 @@ def run_case(pdf_path: Path, json_path: Path, paddleocr_manager) -> Dict[str, An
     extracted_list = main_mod.extract_invoice_info(result_all)
     result_main, result_items = merge_extracted_results(extracted_list)
 
-    truth_main = truth.get('main', {})
-    truth_items = truth.get('items', [])
+    # 使用更健壮的逻辑获取真值结构：兼容顶层字段或 main/items 嵌套
+    truth_main = {k: v for k, v in truth.items() if k != 'items'}
+    truth_items = truth.get('items') if isinstance(truth.get('items'), list) else []
 
     main_stats = compute_main_accuracy(result_main, truth_main)
     items_stats = compute_items_accuracy(result_items, truth_items)
