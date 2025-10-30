@@ -253,7 +253,7 @@ def extract_invoice_info(result_all):
         lines = []
         line_boxes = []
         
-        if not idx_sorted:
+        if len(idx_sorted) == 0:
             return lines, line_boxes
             
         # 2. 计算平均行高作为换行阈值
