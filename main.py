@@ -3,11 +3,7 @@ import socket
 import time
 from datetime import datetime
 
-import numpy
-from PIL import Image
-
-from flask import Flask, request, render_template, send_file
-import json
+from flask import Flask, request, render_template, send_file, after_this_request, jsonify
 import tempfile
 import os
 import uuid
@@ -18,10 +14,24 @@ import pandas as pd
 from thread_single import PaddleOCRModelManager
 
 # 配置日志
-logging.basicConfig(level=logging.INFO, 
+logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
+
+# 允许上传的文件扩展名
+ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.pdf'}
+
+# 延迟初始化的 PaddleOCR 管理器：避免在模块导入时就要求安装 paddleocr，
+# 也避免在非 `python main.py` 直接启动（如 WSGI）场景下 paddleocr 未初始化就被引用
+paddleocr = None
+
+def get_ocr_manager():
+    global paddleocr
+    if paddleocr is None:
+        paddleocr = PaddleOCRModelManager(app)
+    return paddleocr
 
 # 配置socket超时
 socket.setdefaulttimeout(600)  # 设置默认socket超时为10分钟
@@ -46,8 +56,8 @@ def handle_exception(e):
     elif isinstance(e, ConnectionResetError):
         app.logger.warning(f"连接被重置: {str(e)} 来源: {request.remote_addr}")
     else:
-        app.logger.error(f"处理请求时发生异常: {str(e)} 来源: {request.remote_addr}")
-    return "Internal Server Error", 500
+        app.logger.exception(f"处理请求时发生异常 来源: {request.remote_addr}")
+    return jsonify({"error": "服务器内部错误"}), 500
 
 # 限制最大请求大小
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024  # 64MB
@@ -58,18 +68,15 @@ def timeout_check(func):
         start_time = time.time()
         result = func(*args, **kwargs)
         processing_time = time.time() - start_time
-        if processing_time > 600:  # 如果处理时间超过30秒，记录警告
+        if processing_time > 600:  # 如果处理时间超过10分钟，记录警告
             app.logger.warning(f"请求 {request.path} 处理时间过长: {processing_time:.2f}秒 来源: {request.remote_addr}")
         return result
     wrapper.__name__ = func.__name__
     return wrapper
 
-def file_storage_to_ndarray(file_storage):
-    file_storage.stream.seek(0)
-    img = Image.open(file_storage.stream)
-    if img.mode in ('P', 'L'):
-        img = img.convert('BGR')  # 统一维度为H×W×3
-    return numpy.array(img)  # 自动生成dtype=uint8
+def allowed_file(filename):
+    ext = os.path.splitext(filename or '')[1].lower()
+    return ext in ALLOWED_EXTENSIONS
 
 
 # 定义路由和视图函数
@@ -79,23 +86,27 @@ def ocr():
     app.logger.info("开始")
     ### 使用url
     img_url = request.values.get('img_url')
-    result = ''
     if img_url is None:
         filelist = request.files.getlist('img_file')
+        if not filelist:
+            return jsonify({"error": "未上传文件"}), 400
+        results = []
         for file in filelist:
+            if not allowed_file(file.filename):
+                return jsonify({"error": f"不支持的文件类型: {file.filename}"}), 400
             app.logger.info('文件处理'+file.filename)
-            # result = paddleocr.submit_ocr(input=file_storage_to_ndarray(file))
             # 创建临时文件（自动删除）
             with tempfile.NamedTemporaryFile(delete=True, suffix=os.path.splitext(file.filename)[1] ) as temp_file:
                 # 保存上传的文件到临时文件
                 file.save(temp_file.name)
-                result,_ = paddleocr.submit_ocr(input=temp_file.name)
-        return result
+                result, _ = get_ocr_manager().submit_ocr(input=temp_file.name)
+                results.append(result)
+        return "\n".join(results)
     else:
         # 文件处理逻辑...
         app.logger.info(img_url)
-        result,_ = paddleocr.submit_ocr(input=img_url)
-    return result
+        result, _ = get_ocr_manager().submit_ocr(input=img_url)
+        return result
 
 # 导出供外部复用的Excel字段映射
 MAIN_FIELD_MAP = {
@@ -171,7 +182,7 @@ def create_invoices_with_pandas(data_list, output_path=None):
             main_df.to_excel(writer, sheet_name='发票主表', index=False)
             detail_df.to_excel(writer, sheet_name='发票明细', index=False)
     except Exception as e:
-        print(f"创建Excel文件时出错: {e}")
+        logger.error(f"创建Excel文件时出错: {e}")
         raise
     return output_path
 
@@ -202,38 +213,45 @@ ITEM_KEY_MAP = {
     "税额": "tax_amount"
 }
 
-def clean_value(val):
-    # 所有常见字段名及其单字、部分、拆分形式，加入电子发票等
-    field_words = [
-        "发票号码", "开票日期", "购买方名称", "购买方统一社会信用代码", "购买方纳税人识别号",
-        "统一社会信用代码", "纳税人识别号", "销售方名称", "销售方统一社会信用代码", "销售方纳税人识别号",
-        "合计金额", "合计税额", "价税合计", "大写", "小写", "金额", "税额", "税率/征收率", "税率",
-        "项目名称", "规格型号", "单位", "数量", "单价", "备注", "开票人",
-        "电子发票（普通发票）", "电子发票普通发票", "电子发票", "普通发票","国家税务总局"
-    ]
-    # 拆分为单字和部分
+# clean_value 用到的字段名前缀清洗规则：只需在模块加载时构造一次，
+# 避免每次调用（每个OCR文本单元格都会调用一次）都重新拼接/编译正则，带来不必要的开销
+_SYMBOL_CHARS = r'¥￥\(\)（）\[\]\{\}\s:：;；\-_,，.。/\\'
+_FIELD_WORDS = [
+    "发票号码", "开票日期", "购买方名称", "购买方统一社会信用代码", "购买方纳税人识别号",
+    "统一社会信用代码", "纳税人识别号", "销售方名称", "销售方统一社会信用代码", "销售方纳税人识别号",
+    "合计金额", "合计税额", "价税合计", "大写", "小写", "金额", "税额", "税率/征收率", "税率",
+    "项目名称", "规格型号", "单位", "数量", "单价", "备注", "开票人",
+    "电子发票（普通发票）", "电子发票普通发票", "电子发票", "普通发票", "国家税务总局"
+]
+
+
+def _build_field_parts(field_words):
     field_parts = []
     for w in field_words:
         field_parts.append(w)
         field_parts.extend(list(w))
         for i in range(2, min(5, len(w))):
             field_parts.append(w[:i])
-    # 去重
-    field_parts = list(set(field_parts))
-    # 构造正则，允许前面有各种符号、空格、括号、冒号、分号等，也允许单独符号
-    prefix_pattern = (
-        r'^([¥￥\(\)（）\[\]\{\}\s:：;；\-_,，.。/\\]*)'
-        r'(' + '|'.join(map(re.escape, field_parts)) + r')*'
-        r'([¥￥\(\)（）\[\]\{\}\s:：;；\-_,，.。/\\]*)'
-    )
-    # 多次去除前缀
+    return list(set(field_parts))
+
+
+_PREFIX_PATTERN = re.compile(
+    r'^([' + _SYMBOL_CHARS + r']*)'
+    r'(' + '|'.join(map(re.escape, _build_field_parts(_FIELD_WORDS))) + r')*'
+    r'([' + _SYMBOL_CHARS + r']*)'
+)
+_LEADING_SYMBOLS_PATTERN = re.compile(r'^[' + _SYMBOL_CHARS + r']+')
+
+
+def clean_value(val):
+    # 多次去除前缀（字段名、常见符号）
     while True:
-        new_val = re.sub(prefix_pattern, '', val)
+        new_val = _PREFIX_PATTERN.sub('', val)
         if new_val == val:
             break
         val = new_val
     # 最后再去除一次所有前缀符号（防止只剩符号的情况）
-    val = re.sub(r'^[¥￥\(\)（）\[\]\{\}\s:：;；\-_,，.。/\\]+', '', val)
+    val = _LEADING_SYMBOLS_PATTERN.sub('', val)
     val = val.strip()
     return val
 
@@ -256,10 +274,12 @@ def extract_invoice_info(result_all):
         if len(idx_sorted) == 0:
             return lines, line_boxes
             
-        # 2. 计算平均行高作为换行阈值
+        # 2. 计算行高作为换行阈值：使用中位数而非平均数，
+        # 因为发票上常见竖排的分区标签（如“购买方信息”）等极高/极窄的文本框，
+        # 平均数会被这类离群值拉高，导致阈值过大、把本应分开的多行错误合并成一行
         heights = [b[3] - b[1] for b in boxes]
-        avg_height = np.mean(heights) if heights else 15
-        line_height_threshold = avg_height * 0.95  # 使用95%行高作为换行阈值
+        line_height_ref = np.median(heights) if heights else 15
+        line_height_threshold = line_height_ref * 0.95  # 使用95%行高作为换行阈值
         
         # 3. 按y坐标分组
         current_line = []
@@ -422,29 +442,43 @@ def extract_invoice_info(result_all):
         item_header_idx = None
         for i, line in enumerate(lines):
             line_str = " ".join(line)
-            line_box = line_boxes[i]
+            # 记录本行已被某个字段消费掉的文本框下标：购买方/销售方常常同行出现
+            # （如“名称：买方公司”与“名称：卖方公司”在同一行），二者共用通用关键词
+            # “名称”，如果不排除已消费的下标，后处理的字段会重新匹配到已经用过的
+            # 文本框，导致购买方和销售方的取值互相覆盖成同一个值
+            used_token_idx = set()
             for field, kws in KEYWORDS.items():
                 # 如果已经有合计金额，后续不再覆盖
                 if field in invoice_info:
                     continue
                 for kw in kws:
-                    if kw in line_str:
-                        idx = next((j for j, t in enumerate(line) if kw in t), None)
-                        # 合计金额特殊处理：只取“合计”或“合计金额”同一行的下一个文本
-                        if field == "total_amount":
-                            if idx is not None and idx + 1 < len(line):
-                                value = clean_value(line[idx + 1])
-                            else:
-                                # 如果没有下一个，取该行最后一个文本
-                                value = clean_value(line[-1])
-                        elif field in ["buyer_name", "buyer_tax_id"]:
-                            left_idx = np.argmin([b[0] for b in line_box])
-                            value = clean_value(line[left_idx])
-                        elif idx is not None and idx + 1 < len(line):
+                    if kw not in line_str:
+                        continue
+                    idx = next((j for j, t in enumerate(line) if kw in t and j not in used_token_idx), None)
+                    if idx is None:
+                        continue
+                    # 合计金额特殊处理：只取“合计”或“合计金额”同一行的下一个文本
+                    if field == "total_amount":
+                        if idx + 1 < len(line):
+                            value = clean_value(line[idx + 1])
+                        else:
+                            # 如果没有下一个，取该行最后一个文本
+                            value = clean_value(line[-1])
+                    else:
+                        # 多数字段的标签与值是同一个文本框（如“开票日期：2024年07月04日”、
+                        # “名称：杭州xxx公司”），优先用匹配到的文本框自身去掉标签后的值；
+                        # 只有当该文本框去掉标签后为空（说明标签和值确实是分开的文本框，
+                        # 例如“合”“计”分开识别）时，才去取行内下一个文本框
+                        value_in_place = clean_value(line[idx])
+                        if value_in_place:
+                            value = value_in_place
+                        elif idx + 1 < len(line):
                             value = clean_value(line[idx + 1])
                         else:
                             value = clean_value(line_str.replace(kw, "").strip())
-                        invoice_info[field] = value
+                    invoice_info[field] = value
+                    used_token_idx.add(idx)
+                    break
             if not item_header and any(h in line_str for h in ITEM_KEY_MAP.keys()):
                 item_header = line
                 item_header_idx = i
@@ -457,8 +491,10 @@ def extract_invoice_info(result_all):
             header_fields = [ITEM_KEY_MAP.get(h, h) for h in item_header]
             header_len = len(header_fields)
             for line, boxes in zip(lines[item_header_idx + 1:], line_boxes[item_header_idx + 1:]):
-                line_str = " ".join(line)
-                # 跳过合计、价税合计、备注、开票人等行
+                # 跳过合计、价税合计、备注、开票人等行；这里必须用无分隔符拼接，
+                # 否则当“合”“计”被识别成两个独立文本框时，带空格拼接会破坏
+                # “合计”这个子串匹配，导致合计行混入商品明细表
+                line_str = "".join(line)
                 if any(x in line_str for x in ["合计", "价税合计", "备注", "开票人"]):
                     continue
                 # 2. 按x坐标将每个cell归入最近的表头
@@ -510,22 +546,39 @@ def extract_invoice_info(result_all):
 def ocr_excel():
     app.logger.info("开始")
     filelist = request.files.getlist('img_file')
-    path ="ocr_img_file"+str(uuid.uuid4())
-    with tempfile.TemporaryDirectory( prefix=path) as dir_name:
-        print(dir_name)
-        for file in filelist:
-            filename = os.path.basename(file.filename)
-            # 完整的文件路径
-            file_path = os.path.join(dir_name, filename)
-            # 保存文件
-            file.save(file_path)
-        result,result_all = paddleocr.submit_ocr(input=dir_name)
-        p=[]
-        for index, result in enumerate(result_all):
-            p.append({"rec_texts":result["rec_texts"], "rec_boxes":result["rec_boxes"]})
-        ocr_fp_list=extract_invoice_info(result_all)
-        print(ocr_fp_list)
-        temp_path = create_invoices_with_pandas(ocr_fp_list)
+    if not filelist:
+        return jsonify({"error": "未上传文件"}), 400
+    for file in filelist:
+        if not allowed_file(file.filename):
+            return jsonify({"error": f"不支持的文件类型: {file.filename}"}), 400
+
+    path = "ocr_img_file" + str(uuid.uuid4())
+    output_fd, temp_path = tempfile.mkstemp(suffix='.xlsx', prefix='fapiao_')
+    os.close(output_fd)
+    try:
+        with tempfile.TemporaryDirectory(prefix=path) as dir_name:
+            app.logger.info(f"临时目录: {dir_name}")
+            for file in filelist:
+                filename = os.path.basename(file.filename)
+                file_path = os.path.join(dir_name, filename)
+                file.save(file_path)
+            _, result_all = get_ocr_manager().submit_ocr(input=dir_name)
+            ocr_fp_list = extract_invoice_info(result_all)
+            app.logger.info(f"提取到 {len(ocr_fp_list)} 张发票信息")
+            create_invoices_with_pandas(ocr_fp_list, output_path=temp_path)
+    except Exception:
+        # 生成失败时清理已创建的临时文件，避免残留
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise
+
+    @after_this_request
+    def cleanup(response):
+        try:
+            os.remove(temp_path)
+        except OSError as e:
+            app.logger.warning(f"清理临时Excel文件失败: {e}")
+        return response
 
     return send_file(
         temp_path,
@@ -541,9 +594,7 @@ def fapiao():
 
 
 
-# 启动应用（保留入口的一行测试调用，然后启动服务）
+# 启动应用
 if __name__ == '__main__':
-    paddleocr = PaddleOCRModelManager(app)
-    app.logger.setLevel(logging.INFO)
-    __import__('tests.test_ocr_compare').test_ocr_compare.run_all_tests(paddleocr_manager=paddleocr)
-    app.run(host="0.0.0.0", port=80)
+    get_ocr_manager()  # 启动时预热模型，首个请求无需等待初始化
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 80)))

@@ -1,3 +1,9 @@
 pillow~=10.1.0
 pandas~=2.3.2
 openpyxl
+numpy
+Flask==3.1.1
+paddleocr==3.2.0
+# paddleocr 依赖 paddlepaddle（体积较大，未收录进本文件），需要额外单独安装：
+#   CPU: pip install paddlepaddle
+#   GPU: 参照 https://www.paddlepaddle.org.cn/ 按自己的 CUDA 版本安装 paddlepaddle-gpu

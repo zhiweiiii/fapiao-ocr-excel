@@ -1,4 +1,3 @@
-from paddleocr import PaddleOCR
 import os
 import logging
 import time
@@ -13,6 +12,10 @@ class PaddleOCRModelManager(ThreadPoolExecutor):
         self.logger = current_app.logger
         self.logger.info("初始化PaddleOCR模型管理器...")
         try:
+            # 延迟导入：paddleocr 依赖体积巨大（需要 paddlepaddle），
+            # 放在这里而不是模块顶层，这样在未安装 paddleocr 的环境下
+            # 仍可以 import 本模块（以及依赖它的 main.py）用于跑纯逻辑单元测试
+            from paddleocr import PaddleOCR
             self.paddleocr = PaddleOCR(
                 use_doc_orientation_classify=False,
                 use_doc_unwarping=False,

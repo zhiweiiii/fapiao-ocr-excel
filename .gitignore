@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+
+# 运行时生成的文件
+*.xlsx
+!data/*.xlsx
+发票批量导出_*.xlsx
+发票_*.xlsx
+
+# 本地环境变量
+.env

@@ -196,3 +196,11 @@ def run_all_tests(data_dir: Path = ROOT / 'data', paddleocr_manager=None) -> Non
     print('\n=== 汇总 ===')
     print(f'平均总体识别率: {overall_rec_sum / n:.3f}')
     print(f'平均总体准确率: {overall_acc_sum / n:.3f}')
+
+
+if __name__ == '__main__':
+    # 独立运行的真实OCR准确率测试：python -m tests.test_ocr_compare
+    # （需要已安装 paddleocr；不再随 main.py 启动自动执行，避免拖慢/污染服务启动）
+    from thread_single import PaddleOCRModelManager
+    manager = PaddleOCRModelManager(main_mod.app)
+    run_all_tests(paddleocr_manager=manager)
