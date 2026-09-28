@@ -12,10 +12,20 @@ on:
       - templates/**
       - windows/**
       - .github/workflows/windows-release.yml
+  # 也可以在 Actions 页面手动运行：填写版本号（如 v1.0.0）则测试通过后自动创建同名 tag 并发布，
+  # 留空则只打包和测试
   workflow_dispatch:
+    inputs:
+      version:
+        description: "发布版本号，如 v1.0.0（留空则只打包测试，不发布）"
+        required: false
+        default: ""
 
 permissions:
   contents: write
+
+env:
+  RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
 
 jobs:
   package:
@@ -35,7 +45,10 @@ jobs:
       - name: 打包
         id: pack
         run: |
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then VERSION="$GITHUB_REF_NAME"; else VERSION="dev-${GITHUB_SHA::7}"; fi
+          if [ -n "$RELEASE_VERSION" ] && ! [[ "$RELEASE_VERSION" =~ ^v[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "版本号格式不正确：$RELEASE_VERSION（应形如 v1.0.0）"; exit 1
+          fi
+          VERSION="${RELEASE_VERSION:-dev-${GITHUB_SHA::7}}"
           NAME="fapiao-ocr-windows-${VERSION}"
           mkdir -p "dist/${NAME}"
           cp -r main.py thread_single.py requirements.txt templates module start.bat "dist/${NAME}/"
@@ -117,15 +130,19 @@ jobs:
 
   release:
     needs: [package, smoke-test]
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.ref_type == 'tag' || inputs.version != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: windows-package
 
+      # 手动运行时 tag 尚不存在，由该 action 用 GITHUB_TOKEN 在当前提交上创建
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_VERSION }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ env.RELEASE_VERSION }}
           files: ${{ needs.package.outputs.zip_name }}
           body: |
             ## Windows 版使用方法
