@@ -19,6 +19,8 @@
 - **数据处理**：Python 语言
 
 ## 安装与运行
+
+### 方式一：Docker（推荐用于部署）
 安装docker环境，运行项目
 ```bash
 sh build.sh
@@ -26,6 +28,35 @@ sh build.sh
 体验地址：http://zhiwei3306.com/fapiao
 本地访问地址：http://localhost:80/fapiao
 具体功能介绍文章：https://mp.weixin.qq.com/s/dMCdKKOAvlYM8u8h2hiJTw
+
+### 方式二：本地直接运行（不使用 Docker）
+模型权重文件已经放在仓库的 `module/` 目录下，不需要额外下载，只需要装好 Python 依赖即可。
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
+
+# 安装依赖（paddleocr 体积较大，第一次安装会比较慢）
+pip install -r requirements.txt
+# paddleocr 依赖 paddlepaddle，需要单独安装：
+pip install paddlepaddle        # 如果有 GPU，请参照 https://www.paddlepaddle.org.cn/ 安装对应的 paddlepaddle-gpu
+
+# 启动服务（默认监听 80 端口，Linux 上非 root 用户监听 80 端口可能需要权限；
+# 可以用 PORT 环境变量换成其他端口，比如本地开发常用的 8080）
+PORT=8080 python3 main.py
+```
+启动后访问 http://localhost:8080/fapiao 即可使用。
+
+### 运行测试
+```bash
+pip install -r requirements-dev.txt
+
+# 纯逻辑单元测试（不需要安装 paddleocr，几秒内跑完）
+pytest tests/test_main_helpers.py tests/test_extract_invoice_info.py
+
+# 真实 OCR 识别准确率测试（需要已安装 paddleocr，会调用真实模型，比较慢）
+python3 -m tests.test_ocr_compare
+```
 
 目前只测试了标准的发票文件，对于手拍的文件或者其他文件，暂未测试过
 未来如果有提供数据的，可以尝试进一步优化
