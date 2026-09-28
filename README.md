@@ -34,7 +34,7 @@ sh build.sh
 2. 解压到**纯英文路径**（如 `D:\fapiao-ocr`），电脑需已安装 64 位 Python 3.9 ~ 3.13
 3. 双击 `start.bat`：首次运行会自动创建虚拟环境并安装依赖（5~20 分钟），之后双击即可秒开，并自动打开浏览器
 
-详见压缩包内的 `README_Windows.txt`。发布新版本只需推送 `v*` 格式的 tag，GitHub Actions 会自动打包、在 Windows 环境中实际安装运行并识别示例发票，测试通过后发布到 Releases。
+详见压缩包内的 `README_Windows.txt`。发布新版本：推送 `v*` 格式的 tag，或在 GitHub 的 Actions 页面手动运行「Windows 发布包」并填写版本号（如 `v1.0.1`）。GitHub Actions 会自动打包、在 Windows 环境中实际安装运行并识别示例发票，测试通过后发布到 Releases。
 
 ### 方式三：本地直接运行（不使用 Docker）
 模型权重文件已经放在仓库的 `module/` 目录下，不需要额外下载，只需要装好 Python 依赖即可。
