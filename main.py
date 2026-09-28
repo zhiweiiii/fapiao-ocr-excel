@@ -1,9 +1,12 @@
 import logging
 import socket
+import threading
 import time
+import webbrowser
 from datetime import datetime
 
-from flask import Flask, request, render_template, send_file, after_this_request, jsonify
+from flask import Flask, request, render_template, send_file, jsonify
+import io
 import tempfile
 import os
 import uuid
@@ -17,6 +20,8 @@ from thread_single import PaddleOCRModelManager
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+# paddle 导入时会调高 root logger 的级别，这里显式设置，保证本模块的 INFO 日志能输出
+logger.setLevel(logging.INFO)
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 
@@ -553,35 +558,24 @@ def ocr_excel():
             return jsonify({"error": f"不支持的文件类型: {file.filename}"}), 400
 
     path = "ocr_img_file" + str(uuid.uuid4())
-    output_fd, temp_path = tempfile.mkstemp(suffix='.xlsx', prefix='fapiao_')
-    os.close(output_fd)
-    try:
-        with tempfile.TemporaryDirectory(prefix=path) as dir_name:
-            app.logger.info(f"临时目录: {dir_name}")
-            for file in filelist:
-                filename = os.path.basename(file.filename)
-                file_path = os.path.join(dir_name, filename)
-                file.save(file_path)
-            _, result_all = get_ocr_manager().submit_ocr(input=dir_name)
-            ocr_fp_list = extract_invoice_info(result_all)
-            app.logger.info(f"提取到 {len(ocr_fp_list)} 张发票信息")
-            create_invoices_with_pandas(ocr_fp_list, output_path=temp_path)
-    except Exception:
-        # 生成失败时清理已创建的临时文件，避免残留
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-        raise
+    with tempfile.TemporaryDirectory(prefix=path) as dir_name:
+        app.logger.info(f"临时目录: {dir_name}")
+        for file in filelist:
+            filename = os.path.basename(file.filename)
+            file_path = os.path.join(dir_name, filename)
+            file.save(file_path)
+        _, result_all = get_ocr_manager().submit_ocr(input=dir_name)
+        ocr_fp_list = extract_invoice_info(result_all)
+        app.logger.info(f"提取到 {len(ocr_fp_list)} 张发票信息")
 
-    @after_this_request
-    def cleanup(response):
-        try:
-            os.remove(temp_path)
-        except OSError as e:
-            app.logger.warning(f"清理临时Excel文件失败: {e}")
-        return response
+    # 直接在内存中生成 Excel（文件只有几十KB），不落临时文件：
+    # Windows 下 send_file 发送期间文件被占用，请求结束时无法删除，会在 %TEMP% 里越积越多
+    excel_buffer = io.BytesIO()
+    create_invoices_with_pandas(ocr_fp_list, output_path=excel_buffer)
+    excel_buffer.seek(0)
 
     return send_file(
-        temp_path,
+        excel_buffer,
         as_attachment=True,
         download_name=f"发票_{datetime.now().strftime('%Y%m%d')}.xlsx",
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -594,7 +588,28 @@ def fapiao():
 
 
 
+def _open_browser_when_ready(url, port, timeout=60):
+    # 等服务真正开始监听端口后再打开浏览器，避免浏览器先打开看到“无法访问”
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=1):
+                webbrowser.open(url)
+                return
+        except OSError:
+            time.sleep(0.5)
+    logger.warning(f"服务在 {timeout} 秒内未就绪，请手动在浏览器打开 {url}")
+
+
 # 启动应用
 if __name__ == '__main__':
     get_ocr_manager()  # 启动时预热模型，首个请求无需等待初始化
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 80)))
+    # HOST 默认 0.0.0.0 供 Docker 部署使用；桌面版启动器会设为 127.0.0.1，
+    # 只允许本机访问，也避免 Windows 防火墙弹窗
+    host = os.environ.get("HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", 80))
+    if os.environ.get("OPEN_BROWSER") == "1":
+        url = f"http://127.0.0.1:{port}/fapiao"
+        logger.info(f"服务启动后将自动打开浏览器: {url}")
+        threading.Thread(target=_open_browser_when_ready, args=(url, port), daemon=True).start()
+    app.run(host=host, port=port)

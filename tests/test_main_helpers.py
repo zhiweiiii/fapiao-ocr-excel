@@ -76,6 +76,33 @@ def test_ocr_excel_rejects_disallowed_file_type(client):
     assert "error" in resp.get_json()
 
 
+def test_ocr_excel_success_returns_excel_without_temp_files(client, monkeypatch, tmp_path):
+    import json
+    import tempfile
+
+    import numpy as np
+
+    dump = json.loads((ROOT / "tests" / "fixtures" / "dianpiao1_ocr_dump.json").read_text(encoding="utf-8"))
+    result_all = [{"rec_texts": dump["texts"], "rec_boxes": [np.array(b) for b in dump["boxes"]]}]
+
+    class FakeOCRManager:
+        def submit_ocr(self, **kwargs):
+            return "", result_all
+
+    monkeypatch.setattr(main, "get_ocr_manager", lambda: FakeOCRManager())
+    # 把临时目录指到独立目录，便于检查请求结束后没有残留的 Excel 文件
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+
+    data = {"img_file": (io.BytesIO(b"%PDF-1.4 fake"), "invoice.pdf")}
+    resp = client.post("/fapiao/ocr_excel", data=data, content_type="multipart/form-data")
+
+    assert resp.status_code == 200
+    main_df = pd.read_excel(io.BytesIO(resp.data), sheet_name="发票主表", dtype=str)
+    assert main_df.loc[0, "发票号码"] == "20882407041644048604"
+    assert main_df.loc[0, "销售方名称"] == "杭州爱信诺航天信息有限公司(新模式开票)"
+    assert list(tmp_path.glob("**/*.xlsx")) == []
+
+
 def test_ocr_rejects_empty_upload(client):
     resp = client.get("/fapiao/ocr", data={}, content_type="multipart/form-data")
     assert resp.status_code == 400
