@@ -1,6 +1,8 @@
 import logging
 import socket
+import threading
 import time
+import webbrowser
 from datetime import datetime
 
 from flask import Flask, request, render_template, send_file, after_this_request, jsonify
@@ -17,6 +19,8 @@ from thread_single import PaddleOCRModelManager
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+# paddle 导入时会调高 root logger 的级别，这里显式设置，保证本模块的 INFO 日志能输出
+logger.setLevel(logging.INFO)
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 
@@ -594,7 +598,28 @@ def fapiao():
 
 
 
+def _open_browser_when_ready(url, port, timeout=60):
+    # 等服务真正开始监听端口后再打开浏览器，避免浏览器先打开看到“无法访问”
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=1):
+                webbrowser.open(url)
+                return
+        except OSError:
+            time.sleep(0.5)
+    logger.warning(f"服务在 {timeout} 秒内未就绪，请手动在浏览器打开 {url}")
+
+
 # 启动应用
 if __name__ == '__main__':
     get_ocr_manager()  # 启动时预热模型，首个请求无需等待初始化
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 80)))
+    # HOST 默认 0.0.0.0 供 Docker 部署使用；桌面版启动器会设为 127.0.0.1，
+    # 只允许本机访问，也避免 Windows 防火墙弹窗
+    host = os.environ.get("HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", 80))
+    if os.environ.get("OPEN_BROWSER") == "1":
+        url = f"http://127.0.0.1:{port}/fapiao"
+        logger.info(f"服务启动后将自动打开浏览器: {url}")
+        threading.Thread(target=_open_browser_when_ready, args=(url, port), daemon=True).start()
+    app.run(host=host, port=port)

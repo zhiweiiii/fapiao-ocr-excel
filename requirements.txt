@@ -1,9 +1,13 @@
-pillow~=10.1.0
+# -*- coding: utf-8 -*-
+pillow>=10.1.0
 pandas~=2.3.2
 openpyxl
 numpy
 Flask==3.1.1
 paddleocr==3.2.0
-# paddleocr 依赖 paddlepaddle（体积较大，未收录进本文件），需要额外单独安装：
-#   CPU: pip install paddlepaddle
-#   GPU: 参照 https://www.paddlepaddle.org.cn/ 按自己的 CUDA 版本安装 paddlepaddle-gpu
+# paddleocr 依赖 paddlepaddle（体积较大，且CPU/GPU版本二选一，未收录进本文件），需要额外单独安装：
+#   CPU: pip install paddlepaddle==3.1.1
+#   GPU: 参照 https://www.paddlepaddle.org.cn/ 按自己的 CUDA 版本安装 paddlepaddle-gpu==3.1.1
+# 注意固定 3.1.1（与 Dockerfile 基础镜像一致）：paddlepaddle 3.3.x 在 CPU 上运行本项目的模型会报
+#   NotImplementedError: ConvertPirAttribute2RuntimeAttribute not support
+# 支持的 Python 版本：3.9 ~ 3.13

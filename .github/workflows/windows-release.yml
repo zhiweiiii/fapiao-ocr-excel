@@ -1,0 +1,136 @@
+name: Windows 发布包
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - main.py
+      - thread_single.py
+      - requirements.txt
+      - start.bat
+      - templates/**
+      - windows/**
+      - .github/workflows/windows-release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    outputs:
+      zip_name: ${{ steps.pack.outputs.zip_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 检查 start.bat 为 CRLF 换行
+        run: |
+          total=$(wc -l < start.bat)
+          crlf=$(grep -c $'\r$' start.bat)
+          echo "lines=$total crlf=$crlf"
+          test "$total" -eq "$crlf"
+
+      - name: 打包
+        id: pack
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then VERSION="$GITHUB_REF_NAME"; else VERSION="dev-${GITHUB_SHA::7}"; fi
+          NAME="fapiao-ocr-windows-${VERSION}"
+          mkdir -p "dist/${NAME}"
+          cp -r main.py thread_single.py requirements.txt templates module start.bat "dist/${NAME}/"
+          cp windows/README_Windows.txt "dist/${NAME}/"
+          (cd dist && zip -qr "${NAME}.zip" "${NAME}")
+          ls -lh dist/*.zip
+          echo "zip_name=${NAME}.zip" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-package
+          path: dist/${{ steps.pack.outputs.zip_name }}
+          compression-level: 0
+
+  smoke-test:
+    needs: package
+    runs-on: windows-latest
+    env:
+      OPEN_BROWSER: "0"
+      PORT: "8765"
+      PIP_INDEX_URL: https://pypi.org/simple
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            data
+            windows
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-package
+
+      - name: 解压发布包
+        shell: pwsh
+        run: |
+          Expand-Archive -Path ${{ needs.package.outputs.zip_name }} -DestinationPath C:\fapiao
+          $dir = (Get-ChildItem C:\fapiao -Directory | Select-Object -First 1).FullName
+          "APP_DIR=$dir" >> $env:GITHUB_ENV
+
+      # 启动服务与调用接口放在同一步：Windows 上后台进程与本步骤的控制台绑定，步骤结束可能被一并关闭
+      - name: 模拟双击 start.bat，上传示例发票并校验导出的 Excel
+        shell: pwsh
+        run: |
+          $out = "$env:RUNNER_TEMP\start_out.log"
+          $err = "$env:RUNNER_TEMP\start_err.log"
+          $p = Start-Process -FilePath cmd.exe -ArgumentList '/c', 'start.bat' -WorkingDirectory $env:APP_DIR `
+               -RedirectStandardOutput $out -RedirectStandardError $err -PassThru -NoNewWindow
+          $ok = $false
+          for ($i = 0; $i -lt 180; $i++) {
+            Start-Sleep -Seconds 10
+            if ($p.HasExited) { Write-Host "start.bat 提前退出，退出码 $($p.ExitCode)"; break }
+            try {
+              $r = Invoke-WebRequest -Uri "http://127.0.0.1:$env:PORT/fapiao" -UseBasicParsing -TimeoutSec 5
+              if ($r.StatusCode -eq 200) { $ok = $true; break }
+            } catch {}
+          }
+          try {
+            if (-not $ok) { throw "服务未能在规定时间内启动" }
+
+            $pdf = (Get-ChildItem data\*.pdf | Select-Object -First 1).FullName
+            $json = [System.IO.Path]::ChangeExtension($pdf, '.json')
+            Copy-Item $pdf "$env:RUNNER_TEMP\sample.pdf"
+            curl.exe -sS -f -o "$env:RUNNER_TEMP\result.xlsx" -F "img_file=@$env:RUNNER_TEMP\sample.pdf" "http://127.0.0.1:$env:PORT/fapiao/ocr_excel"
+            if ($LASTEXITCODE -ne 0) { throw "识别接口调用失败" }
+            & "$env:APP_DIR\.venv\Scripts\python.exe" windows\smoke_check.py $env:APP_DIR "$env:RUNNER_TEMP\result.xlsx" $json
+            if ($LASTEXITCODE -ne 0) { throw "导出结果与真值不一致" }
+          } finally {
+            Write-Host "===== start.bat stdout ====="; Get-Content $out -Tail 80 -ErrorAction SilentlyContinue
+            Write-Host "===== start.bat stderr ====="; Get-Content $err -Tail 80 -ErrorAction SilentlyContinue
+          }
+
+  release:
+    needs: [package, smoke-test]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-package
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ needs.package.outputs.zip_name }}
+          body: |
+            ## Windows 版使用方法
+            1. 下载下方的 `${{ needs.package.outputs.zip_name }}`，解压到**纯英文路径**（如 `D:\fapiao-ocr`）
+            2. 需要已安装 64 位 Python 3.9 ~ 3.13（推荐 3.12，安装时勾选 "Add python.exe to PATH"）
+            3. 双击 `start.bat`，首次运行会自动联网安装依赖（5~20 分钟），之后秒开
+            4. 浏览器会自动打开 http://127.0.0.1:8765/fapiao ，上传发票即可导出 Excel
+
+            详细说明见压缩包内的 `README_Windows.txt`。
+
+            本发布包已在 GitHub Actions 的 Windows 环境中自动完成安装、启动和示例发票识别测试。

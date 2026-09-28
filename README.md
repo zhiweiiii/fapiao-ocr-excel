@@ -29,7 +29,14 @@ sh build.sh
 本地访问地址：http://localhost:80/fapiao
 具体功能介绍文章：https://mp.weixin.qq.com/s/dMCdKKOAvlYM8u8h2hiJTw
 
-### 方式二：本地直接运行（不使用 Docker）
+### 方式二：Windows 一键启动（双击运行）
+1. 在 [Releases](https://github.com/zhiweiiii/fapiao-ocr-excel/releases) 页面下载最新的 `fapiao-ocr-windows-*.zip`（或直接 clone 本仓库）
+2. 解压到**纯英文路径**（如 `D:\fapiao-ocr`），电脑需已安装 64 位 Python 3.9 ~ 3.13
+3. 双击 `start.bat`：首次运行会自动创建虚拟环境并安装依赖（5~20 分钟），之后双击即可秒开，并自动打开浏览器
+
+详见压缩包内的 `README_Windows.txt`。发布新版本只需推送 `v*` 格式的 tag，GitHub Actions 会自动打包、在 Windows 环境中实际安装运行并识别示例发票，测试通过后发布到 Releases。
+
+### 方式三：本地直接运行（不使用 Docker）
 模型权重文件已经放在仓库的 `module/` 目录下，不需要额外下载，只需要装好 Python 依赖即可。
 
 ```bash
@@ -38,8 +45,8 @@ source .venv/bin/activate       # Windows: .venv\Scripts\activate
 
 # 安装依赖（paddleocr 体积较大，第一次安装会比较慢）
 pip install -r requirements.txt
-# paddleocr 依赖 paddlepaddle，需要单独安装：
-pip install paddlepaddle        # 如果有 GPU，请参照 https://www.paddlepaddle.org.cn/ 安装对应的 paddlepaddle-gpu
+# paddleocr 依赖 paddlepaddle，需要单独安装（请固定 3.1.1，3.3.x 在 CPU 上会报错）：
+pip install paddlepaddle==3.1.1 # 如果有 GPU，请参照 https://www.paddlepaddle.org.cn/ 安装对应的 paddlepaddle-gpu
 
 # 启动服务（默认监听 80 端口，Linux 上非 root 用户监听 80 端口可能需要权限；
 # 可以用 PORT 环境变量换成其他端口，比如本地开发常用的 8080）
