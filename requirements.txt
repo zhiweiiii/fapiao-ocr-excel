@@ -5,6 +5,8 @@ openpyxl
 numpy
 Flask==3.1.1
 paddleocr==3.2.0
+# 读取电子发票 PDF 文本层（paddleocr 也依赖它，这里显式列出是因为 pdf_text.py 直接使用）
+pypdfium2
 # paddleocr 依赖 paddlepaddle（体积较大，且CPU/GPU版本二选一，未收录进本文件），需要额外单独安装：
 #   CPU: pip install paddlepaddle==3.1.1
 #   GPU: 参照 https://www.paddlepaddle.org.cn/ 按自己的 CUDA 版本安装 paddlepaddle-gpu==3.1.1

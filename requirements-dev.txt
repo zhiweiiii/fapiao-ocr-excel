@@ -1,2 +1,4 @@
 -r requirements.txt
 pytest
+# 仅重新生成 tests/eval/synthetic 合成发票时需要
+reportlab

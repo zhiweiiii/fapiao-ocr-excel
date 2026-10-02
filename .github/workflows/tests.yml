@@ -1,0 +1,26 @@
+name: 单元测试与识别准确率回归
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 这些测试不需要 OCR 模型（paddleocr 在 main.py 中延迟导入），只装轻量依赖
+      - name: 安装依赖
+        run: pip install "Flask==3.1.1" "pandas~=2.3.2" openpyxl numpy pillow pypdfium2 pytest
+
+      - name: 运行测试
+        run: pytest tests/test_main_helpers.py tests/test_extract_invoice_info.py tests/test_pdf_text.py -v
+
+      - name: PDF 文本层识别准确率
+        run: python -m tests.eval.eval_accuracy --source text --verbose

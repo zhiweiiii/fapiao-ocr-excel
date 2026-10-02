@@ -13,7 +13,9 @@ import uuid
 import numpy as np
 import re
 import pandas as pd
+from decimal import Decimal
 
+import pdf_text
 from thread_single import PaddleOCRModelManager
 
 # 配置日志
@@ -79,6 +81,22 @@ def timeout_check(func):
     wrapper.__name__ = func.__name__
     return wrapper
 
+def read_invoice_file(path):
+    """读取一个发票文件，返回与 PaddleOCR 结果同构的逐页列表。
+
+    电子发票 PDF 优先直接读文本层（快且不会认错字），
+    扫描件、图片等没有可用文本层的文件走 OCR。
+    """
+    manager = get_ocr_manager()
+    if path.lower().endswith('.pdf'):
+        pages = manager.run_exclusive(pdf_text.extract_pages, path)
+        if pages:
+            app.logger.info(f"使用 PDF 文本层识别: {os.path.basename(path)}")
+            return pages
+    _, pages = manager.submit_ocr(input=path)
+    return pages
+
+
 def allowed_file(filename):
     ext = os.path.splitext(filename or '')[1].lower()
     return ext in ALLOWED_EXTENSIONS
@@ -127,7 +145,8 @@ MAIN_FIELD_MAP = {
     "total_with_tax_cn": "价税合计（大写）",
     "total_with_tax_num": "价税合计（小写）",
     "remark": "备注",
-    "issuer": "开票人"
+    "issuer": "开票人",
+    "review": "复核提示",
 }
 DETAIL_FIELD_MAP = {
     "product_name": "项目名称",
@@ -220,7 +239,8 @@ ITEM_KEY_MAP = {
 
 # clean_value 用到的字段名前缀清洗规则：只需在模块加载时构造一次，
 # 避免每次调用（每个OCR文本单元格都会调用一次）都重新拼接/编译正则，带来不必要的开销
-_SYMBOL_CHARS = r'¥￥\(\)（）\[\]\{\}\s:：;；\-_,，.。/\\'
+# 紧跟数字的"-"是负数（折扣行金额），不能当作符号去掉
+_SYMBOL = r'(?:[¥￥\(\)（）\[\]\{\}\s:：;；_,，.。/\\]|-(?!\d))'
 _FIELD_WORDS = [
     "发票号码", "开票日期", "购买方名称", "购买方统一社会信用代码", "购买方纳税人识别号",
     "统一社会信用代码", "纳税人识别号", "销售方名称", "销售方统一社会信用代码", "销售方纳税人识别号",
@@ -241,11 +261,11 @@ def _build_field_parts(field_words):
 
 
 _PREFIX_PATTERN = re.compile(
-    r'^([' + _SYMBOL_CHARS + r']*)'
+    r'^(' + _SYMBOL + r'*)'
     r'(' + '|'.join(map(re.escape, _build_field_parts(_FIELD_WORDS))) + r')*'
-    r'([' + _SYMBOL_CHARS + r']*)'
+    r'(' + _SYMBOL + r'*)'
 )
-_LEADING_SYMBOLS_PATTERN = re.compile(r'^[' + _SYMBOL_CHARS + r']+')
+_LEADING_SYMBOLS_PATTERN = re.compile(r'^' + _SYMBOL + r'+')
 
 
 def clean_value(val):
@@ -260,12 +280,183 @@ def clean_value(val):
     val = val.strip()
     return val
 
+def split_stacked_cells(texts, boxes):
+    """OCR 会把明细表同一列上下相邻行的单字（如单位"个""卷"）识别成一个竖排文本框，按字拆回各行。
+
+    只处理表头与合计行之间、又高又窄的多字文本框，不影响表格外的竖排标签（如"购买方信息"）。
+    """
+    if not len(boxes):
+        return texts, boxes
+    med_h = np.median([b[3] - b[1] for b in boxes])
+    header = [b for t, b in zip(texts, boxes) if t.replace(" ", "") in ("项目名称", "金额", "税额", "单价", "数量")]
+    if not header:
+        return texts, boxes
+    header_bottom = max(b[3] for b in header)
+    # 表格下边界：合计行；OCR 漏识别"合""计"时，再用价税合计、备注、开票人兜底，
+    # 否则竖排的"备注"标签也会被当成粘连的单元格拆开
+    footer = [b[1] for t, b in zip(texts, boxes) if b[1] > header_bottom and (
+        t.strip() in ("合", "计") or any(k in t for k in ("合计", "备注", "开票人")))]
+    footer_top = min(footer) if footer else float("inf")
+    out_texts, out_boxes = [], []
+    for text, box in zip(texts, boxes):
+        chars = text.replace(" ", "")
+        height, width = box[3] - box[1], box[2] - box[0]
+        if (len(chars) >= 2 and height > 1.8 * med_h and width < height
+                and box[1] >= header_bottom - 2 and box[3] <= footer_top + 2):
+            step = height / len(chars)
+            for k, ch in enumerate(chars):
+                out_texts.append(ch)
+                out_boxes.append(np.array([box[0], box[1] + k * step, box[2], box[1] + (k + 1) * step]))
+        else:
+            out_texts.append(text)
+            out_boxes.append(box)
+    return out_texts, out_boxes
+
+
+_NUMBER = re.compile(r"-?(?:0|[1-9]\d*)(?:\.\d+)?")
+_CN_DIGITS = {c: i for i, c in enumerate("零壹贰叁肆伍陆柒捌玖")}
+_CN_UNITS = {"拾": 10, "佰": 100, "仟": 1000}
+
+
+def to_decimal(value):
+    text = str(value or "").replace(",", "").replace("，", "").strip()
+    if not _NUMBER.fullmatch(text):
+        return None
+    return Decimal(text)
+
+
+def parse_cn_money(text):
+    """解析大写金额（如"捌仟陆佰捌拾肆元捌角"），无法解析时返回 None。"""
+    text = (text or "").replace("圆", "元").replace(" ", "").rstrip("整正")
+    if not text:
+        return None
+    yuan_part, rest = text.split("元", 1) if "元" in text else ("", text)
+    total = section = digit = 0
+    for ch in yuan_part:
+        if ch in _CN_DIGITS:
+            digit = _CN_DIGITS[ch]
+        elif ch in _CN_UNITS:
+            # "拾元"是"壹拾元"的简写
+            section += (digit or (1 if ch == "拾" else 0)) * _CN_UNITS[ch]
+            digit = 0
+        elif ch == "万":
+            total += (section + digit) * 10000
+            section = digit = 0
+        elif ch == "亿":
+            total = (total + section + digit) * 100000000
+            section = digit = 0
+        else:
+            return None
+    value = Decimal(total + section + digit)
+    rest = rest.lstrip("零")
+    for unit, scale in (("角", Decimal("0.1")), ("分", Decimal("0.01"))):
+        if len(rest) >= 2 and rest[1] == unit and rest[0] in _CN_DIGITS:
+            value += _CN_DIGITS[rest[0]] * scale
+            rest = rest[2:].lstrip("零")
+    return value if not rest else None
+
+
+def split_merged_qty_price(item):
+    """OCR 把相邻的数量和单价识别成一串数字（如"1"+"0.0183486238532"→"10.0183486238532"）时，
+    用"数量×单价≈金额"找出唯一合理的切分位置。"""
+    qty, price, amount = item.get("quantity", ""), item.get("unit_price", ""), to_decimal(item.get("amount"))
+    if amount is None or bool(qty) == bool(price):
+        return
+    merged = qty or price
+    # 只有数量或只有单价、且它本身就等于金额，属于正常情况（如数量为 1 时省略）
+    if to_decimal(merged) == amount or not re.fullmatch(r"\d+(?:\.\d+)?", merged):
+        return
+    tolerance = max(Decimal("0.01"), abs(amount) * Decimal("0.001"))
+    best = None
+    for k in range(1, len(merged)):
+        q, p = to_decimal(merged[:k]), to_decimal(merged[k:])
+        if q is None or p is None or q == 0:
+            continue
+        error = abs(q * p - abs(amount))
+        if error <= tolerance and (best is None or error < best[0]):
+            best = (error, merged[:k], merged[k:])
+    if best:
+        item["quantity"], item["unit_price"] = best[1], best[2]
+
+
+def validate_invoice(info):
+    """用发票内在的数量关系和格式做交叉校验，返回发现的问题列表（为空表示通过）。"""
+    problems = []
+    for key, label in (("invoice_number", "发票号码"), ("invoice_date", "开票日期"), ("buyer_name", "购买方名称"),
+                       ("seller_name", "销售方名称"), ("total_amount", "合计金额"), ("total_with_tax_num", "价税合计")):
+        if not info.get(key):
+            problems.append(f"{label}未识别")
+    if info.get("invoice_number") and not re.fullmatch(r"\d{8}|\d{20}", info["invoice_number"]):
+        problems.append("发票号码格式异常")
+    if info.get("invoice_date") and not re.fullmatch(r"\d{4}年\d{1,2}月\d{1,2}日|\d{4}-\d{2}-\d{2}", info["invoice_date"]):
+        problems.append("开票日期格式异常")
+    for key, label in (("buyer_tax_id", "购买方税号"), ("seller_tax_id", "销售方税号")):
+        if info.get(key) and not re.fullmatch(r"[0-9A-Z]{15,20}", info[key]):
+            problems.append(f"{label}格式异常")
+
+    items = info.get("items", [])
+    if not items:
+        problems.append("未识别到商品明细")
+    total_amount, total_tax = to_decimal(info.get("total_amount")), to_decimal(info.get("total_tax"))
+    total_with_tax = to_decimal(info.get("total_with_tax_num"))
+    cent = Decimal("0.01")
+    for key, total, label in (("amount", total_amount, "金额"), ("tax_amount", total_tax, "税额")):
+        values = [to_decimal(i.get(key)) for i in items]
+        if items and total is not None and None not in values and abs(sum(values) - total) > cent:
+            problems.append(f"明细{label}之和({sum(values)})与合计{label}({total})不符")
+    if None not in (total_amount, total_tax, total_with_tax) and abs(total_amount + total_tax - total_with_tax) > cent:
+        problems.append("合计金额+合计税额≠价税合计")
+    if info.get("total_with_tax_cn") and total_with_tax is not None:
+        if parse_cn_money(info["total_with_tax_cn"]) != total_with_tax:
+            problems.append("价税合计大小写不一致")
+    row_problems = {"金额未识别": [], "数量×单价≠金额": []}
+    for i, item in enumerate(items, 1):
+        q, p, a = (to_decimal(item.get(k)) for k in ("quantity", "unit_price", "amount"))
+        if a is None:
+            row_problems["金额未识别"].append(str(i))
+        elif None not in (q, p) and abs(q * p - a) > max(cent, abs(a) * Decimal("0.001")):
+            row_problems["数量×单价≠金额"].append(str(i))
+    for problem, rows in row_problems.items():
+        if rows:
+            problems.append(f"第{'、'.join(rows)}行{problem}")
+    return problems
+
+
+def clean_cell(val):
+    # 明细单元格里不会出现字段标签（表头单独一行），不能用 clean_value：
+    # 它会把与字段名同字的值删掉，例如单位"项"（项目名称的"项"）
+    return re.sub(r"^[¥￥]\s*", "", val.strip())
+
+
+def extract_remark(texts, boxes):
+    """备注栏内容：取"备注"标签右侧、竖直方向落在标签范围内的所有文本。
+
+    "备注"通常是竖排标签，内容和它不在同一"行"，按行匹配关键词取不到。
+    备注是自由文本，不能用 clean_value 清洗（会误删开头与字段名相同的字）。
+    """
+    label_idx = next((i for i, t in enumerate(texts) if t.replace(" ", "").startswith("备注")), None)
+    if label_idx is None:
+        return ""
+    label = boxes[label_idx]
+    pad = 0.5 * np.median([b[3] - b[1] for b in boxes])
+    parts = []
+    fused = re.sub(r"^备\s*注\s*[:：]?", "", texts[label_idx]).strip()
+    if fused:
+        parts.append((label[1], label[0], fused))
+    for i, (text, box) in enumerate(zip(texts, boxes)):
+        center_y = (box[1] + box[3]) / 2
+        if i != label_idx and box[0] >= label[2] - 1 and label[1] - pad <= center_y <= label[3] + pad:
+            parts.append((box[1], box[0], text.strip()))
+    # 先按行（以行高取整）、再按从左到右排序，避免同一行的几段因上沿相差一两个像素而乱序
+    parts.sort(key=lambda p: (round(p[0] / (2 * pad)), p[1]))
+    return " ".join(t for _, _, t in parts if t)
+
+
 def extract_invoice_info(result_all):
     # 使用模块级常量 KEYWORDS 和 ITEM_KEY_MAP（原本在函数内定义）
     global KEYWORDS, ITEM_KEY_MAP
-    INVOICE_TYPE_CANDIDATES = [
-        "增值税专用发票", "增值税普通发票", "电子普通发票", "增值税电子普通发票", "机动车销售统一发票"
-    ]
+    # 不能用"统一发票"：会命中发票监制章上的"全国统一发票监制章"
+    INVOICE_TYPE_KEYWORDS = ["专用发票", "普通发票", "电子发票", "销售统一发票", "电子客票", "行程单"]
 
     def group_lines(texts, boxes, y_thresh=15):
         """按照 thread_single.py 的思路重构分行逻辑：基于行高判断换行"""
@@ -290,12 +481,20 @@ def extract_invoice_info(result_all):
         current_line = []
         current_boxes = []
         current_y = cy_list[idx_sorted[0]]
-        
+        anchor = boxes[idx_sorted[0]]
+
+        def same_line(box):
+            # 中心距离在一个行高以内，且与本行首个文本框在竖直方向上至少重叠一半：
+            # 明细表行距较小时，只看中心距离会把相邻两行的单元格并到一起
+            if abs((box[1] + box[3]) / 2 - current_y) > line_height_threshold:
+                return False
+            overlap = min(box[3], anchor[3]) - max(box[1], anchor[1])
+            return overlap >= 0.5 * min(box[3] - box[1], anchor[3] - anchor[1])
+
         for idx in idx_sorted:
             y_center = cy_list[idx]
-            
-            # 判断是否换行：y坐标差大于行高阈值
-            if abs(y_center - current_y) > line_height_threshold:
+
+            if not same_line(boxes[idx]):
                 # 换行，保存当前行
                 if current_line:
                     # 按x坐标排序当前行
@@ -307,6 +506,7 @@ def extract_invoice_info(result_all):
                 current_line = [texts[idx]]
                 current_boxes = [boxes[idx]]
                 current_y = y_center
+                anchor = boxes[idx]
             else:
                 # 同一行，添加到当前行
                 current_line.append(texts[idx])
@@ -322,8 +522,7 @@ def extract_invoice_info(result_all):
 
     results = []
     for result in result_all:
-        texts = result["rec_texts"]
-        boxes = result["rec_boxes"]
+        texts, boxes = split_stacked_cells(list(result["rec_texts"]), list(result["rec_boxes"]))
         lines, line_boxes = group_lines(texts, boxes)
 
         invoice_info = {}
@@ -401,15 +600,10 @@ def extract_invoice_info(result_all):
                 candidates.append(first_line[n // 2])
             # 再遍历整行
             candidates += first_line
-            found = False
+            # 返回完整标题（如"电子发票（增值税专用发票）"），而不只是命中的关键词
             for text in candidates:
-                candidate = text.replace(" ", "").replace("（", "(").replace("）", ")")
-                for t in INVOICE_TYPE_CANDIDATES:
-                    if t in candidate:
-                        invoice_type = t
-                        found = True
-                        break
-                if found:
+                if any(t in text.replace(" ", "") for t in INVOICE_TYPE_KEYWORDS):
+                    invoice_type = text.replace(" ", "")
                     break
             if not invoice_type and candidates:
                 invoice_type = candidates[0]
@@ -442,7 +636,8 @@ def extract_invoice_info(result_all):
                     total_with_tax_num = clean_value(line[-1])
         invoice_info["total_with_tax_num"] = total_with_tax_num
 
-        
+        invoice_info["remark"] = extract_remark(texts, boxes)
+
         item_header = None
         item_header_idx = None
         for i, line in enumerate(lines):
@@ -495,12 +690,14 @@ def extract_invoice_info(result_all):
             col_centers = [((b[0] + b[2]) / 2) for b in header_boxes]
             header_fields = [ITEM_KEY_MAP.get(h, h) for h in item_header]
             header_len = len(header_fields)
-            for line, boxes in zip(lines[item_header_idx + 1:], line_boxes[item_header_idx + 1:]):
-                # 跳过合计、价税合计、备注、开票人等行；这里必须用无分隔符拼接，
-                # 否则当“合”“计”被识别成两个独立文本框时，带空格拼接会破坏
-                # “合计”这个子串匹配，导致合计行混入商品明细表
+            for line_idx in range(item_header_idx + 1, len(lines)):
+                line, boxes = lines[line_idx], line_boxes[line_idx]
+                # 合计行及其下方（价税合计、备注、开票人）都不属于明细，遇到就结束；
+                # 这里必须用无分隔符拼接，否则"合""计"被识别成两个独立文本框时匹配不到"合计"
                 line_str = "".join(line)
-                if any(x in line_str for x in ["合计", "价税合计", "备注", "开票人"]):
+                if line_idx == total_amount_line_idx or any(x in line_str for x in ["价税合计", "备注", "开票人"]):
+                    break
+                if "合计" in line_str:
                     continue
                 # 2. 按x坐标将每个cell归入最近的表头
                 row_cells = [''] * header_len
@@ -538,12 +735,26 @@ def extract_invoice_info(result_all):
                     pass
 
                 # 3. 构造 item，字段名与表头一一对应；过滤全空行
-                item_values = [clean_value(row_cells[j]) for j in range(header_len)]
+                item_values = [clean_cell(row_cells[j]) for j in range(header_len)]
                 if all(v == '' for v in item_values):
                     continue
                 item = {header_fields[j]: item_values[j] for j in range(header_len)}
+                # OCR 漏识别"合""计"两个字时，合计行只剩带 ¥ 的金额，会被误当成一条明细
+                if not item.get("product_name") and all(re.match(r"^[¥￥]\s*-?\d", t.strip()) for t in line):
+                    if not invoice_info.get("total_amount"):
+                        amounts = [clean_value(t) for t in line]
+                        invoice_info["total_amount"] = amounts[0]
+                        invoice_info["total_tax"] = amounts[-1] if len(amounts) > 1 else ""
+                    break
+                # 品名过长换行：续行只有品名，没有数量、金额等，接到上一条明细的品名后面
+                money_fields = ("quantity", "unit_price", "amount", "tax_rate", "tax_amount")
+                if items and item.get("product_name") and not any(item.get(k) for k in money_fields):
+                    items[-1]["product_name"] += item["product_name"]
+                    continue
+                split_merged_qty_price(item)
                 items.append(item)
         invoice_info["items"] = items
+        invoice_info["review"] = "；".join(validate_invoice(invoice_info))
         results.append(invoice_info)
     return results
 @app.route('/fapiao/ocr_excel', methods=['POST'])
@@ -558,15 +769,16 @@ def ocr_excel():
             return jsonify({"error": f"不支持的文件类型: {file.filename}"}), 400
 
     path = "ocr_img_file" + str(uuid.uuid4())
+    result_all = []
     with tempfile.TemporaryDirectory(prefix=path) as dir_name:
         app.logger.info(f"临时目录: {dir_name}")
-        for file in filelist:
-            filename = os.path.basename(file.filename)
-            file_path = os.path.join(dir_name, filename)
+        for i, file in enumerate(filelist):
+            # 加序号前缀，避免同名文件互相覆盖
+            file_path = os.path.join(dir_name, f"{i}_{os.path.basename(file.filename)}")
             file.save(file_path)
-        _, result_all = get_ocr_manager().submit_ocr(input=dir_name)
-        ocr_fp_list = extract_invoice_info(result_all)
-        app.logger.info(f"提取到 {len(ocr_fp_list)} 张发票信息")
+            result_all.extend(read_invoice_file(file_path))
+    ocr_fp_list = extract_invoice_info(result_all)
+    app.logger.info(f"提取到 {len(ocr_fp_list)} 张发票信息")
 
     # 直接在内存中生成 Excel（文件只有几十KB），不落临时文件：
     # Windows 下 send_file 发送期间文件被占用，请求结束时无法删除，会在 %TEMP% 里越积越多

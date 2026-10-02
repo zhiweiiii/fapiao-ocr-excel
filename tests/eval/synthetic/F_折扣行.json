@@ -1,0 +1,37 @@
+{
+ "invoice_type": "电子发票（普通发票）",
+ "invoice_number": "24312000000222333444",
+ "invoice_date": "2024年12月02日",
+ "buyer_name": "上海星辰科技有限公司",
+ "buyer_tax_id": "91310115MA1K4ABCD2",
+ "seller_name": "北京云帆软件服务有限公司",
+ "seller_tax_id": "91110108MA01XYZW3Q",
+ "total_amount": "3000.00",
+ "total_tax": "390.00",
+ "total_with_tax_cn": "叁仟叁佰玖拾元整",
+ "total_with_tax_num": "3390.00",
+ "remark": "",
+ "issuer": "王芳",
+ "items": [
+  {
+   "product_name": "*办公设备*激光打印机",
+   "specification": "M1136",
+   "unit": "台",
+   "quantity": "2",
+   "unit_price": "1580.00",
+   "amount": "3160.00",
+   "tax_rate": "13%",
+   "tax_amount": "410.80"
+  },
+  {
+   "product_name": "*办公设备*激光打印机",
+   "specification": "",
+   "unit": "",
+   "quantity": "",
+   "unit_price": "",
+   "amount": "-160.00",
+   "tax_rate": "13%",
+   "tax_amount": "-20.80"
+  }
+ ]
+}

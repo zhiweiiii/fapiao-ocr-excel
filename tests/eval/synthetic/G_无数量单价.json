@@ -1,0 +1,37 @@
+{
+ "invoice_type": "电子发票（普通发票）",
+ "invoice_number": "24312000000123456789",
+ "invoice_date": "2024年09月18日",
+ "buyer_name": "上海星辰科技有限公司",
+ "buyer_tax_id": "91310115MA1K4ABCD2",
+ "seller_name": "杭州远见企业管理咨询有限公司",
+ "seller_tax_id": "91330106MA2H9JKL5P",
+ "total_amount": "31500.00",
+ "total_tax": "1890.00",
+ "total_with_tax_cn": "叁万叁仟叁佰玖拾元整",
+ "total_with_tax_num": "33390.00",
+ "remark": "",
+ "issuer": "陈晓",
+ "items": [
+  {
+   "product_name": "*咨询服务*管理咨询服务费",
+   "specification": "",
+   "unit": "",
+   "quantity": "",
+   "unit_price": "",
+   "amount": "28000.00",
+   "tax_rate": "6%",
+   "tax_amount": "1680.00"
+  },
+  {
+   "product_name": "*会议服务*会议服务费",
+   "specification": "",
+   "unit": "",
+   "quantity": "",
+   "unit_price": "",
+   "amount": "3500.00",
+   "tax_rate": "6%",
+   "tax_amount": "210.00"
+  }
+ ]
+}
