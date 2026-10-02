@@ -7,6 +7,7 @@ on:
     paths:
       - main.py
       - thread_single.py
+      - pdf_text.py
       - requirements.txt
       - start.bat
       - templates/**
@@ -51,7 +52,7 @@ jobs:
           VERSION="${RELEASE_VERSION:-dev-${GITHUB_SHA::7}}"
           NAME="fapiao-ocr-windows-${VERSION}"
           mkdir -p "dist/${NAME}"
-          cp -r main.py thread_single.py requirements.txt templates module start.bat "dist/${NAME}/"
+          cp -r main.py thread_single.py pdf_text.py requirements.txt templates module start.bat "dist/${NAME}/"
           cp windows/README_Windows.txt "dist/${NAME}/"
           (cd dist && zip -qr "${NAME}.zip" "${NAME}")
           ls -lh dist/*.zip
@@ -120,6 +121,14 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "识别接口调用失败" }
             & "$env:APP_DIR\.venv\Scripts\python.exe" windows\smoke_check.py $env:APP_DIR "$env:RUNNER_TEMP\result.xlsx" $json
             if ($LASTEXITCODE -ne 0) { throw "导出结果与真值不一致" }
+            if (-not (Select-String -Path $err -Pattern '使用 PDF 文本层识别' -Quiet)) { throw "电子发票 PDF 没有走文本层识别" }
+
+            # PDF 走文本层后不再经过 OCR，再上传一张图片，确保 OCR 模型在 Windows 上也能正常工作
+            & "$env:APP_DIR\.venv\Scripts\python.exe" -c "import pypdfium2 as p, sys; d = p.PdfDocument(sys.argv[1]); d[0].render(scale=2).to_pil().save(sys.argv[2])" "$env:RUNNER_TEMP\sample.pdf" "$env:RUNNER_TEMP\sample.png"
+            curl.exe -sS -f -o "$env:RUNNER_TEMP\result_png.xlsx" -F "img_file=@$env:RUNNER_TEMP\sample.png" "http://127.0.0.1:$env:PORT/fapiao/ocr_excel"
+            if ($LASTEXITCODE -ne 0) { throw "图片识别接口调用失败" }
+            & "$env:APP_DIR\.venv\Scripts\python.exe" windows\smoke_check.py $env:APP_DIR "$env:RUNNER_TEMP\result_png.xlsx" $json
+            if ($LASTEXITCODE -ne 0) { throw "图片 OCR 导出结果与真值不一致" }
 
             $leftover = Get-ChildItem $env:TEMP -Filter 'fapiao_*.xlsx' -ErrorAction SilentlyContinue
             if ($leftover) { $leftover | ForEach-Object { Write-Host $_.FullName }; throw "请求结束后临时目录中残留了 Excel 文件" }

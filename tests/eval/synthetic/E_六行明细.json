@@ -1,0 +1,77 @@
+{
+ "invoice_type": "电子发票（普通发票）",
+ "invoice_number": "24312000000555666777",
+ "invoice_date": "2024年11月21日",
+ "buyer_name": "上海星辰科技有限公司",
+ "buyer_tax_id": "91310115MA1K4ABCD2",
+ "seller_name": "北京云帆软件服务有限公司",
+ "seller_tax_id": "91110108MA01XYZW3Q",
+ "total_amount": "3672.50",
+ "total_tax": "417.23",
+ "total_with_tax_cn": "肆仟零捌拾玖元柒角叁分",
+ "total_with_tax_num": "4089.73",
+ "remark": "",
+ "issuer": "王芳",
+ "items": [
+  {
+   "product_name": "*食品*矿泉水",
+   "specification": "550ml",
+   "unit": "箱",
+   "quantity": "30",
+   "unit_price": "28.00",
+   "amount": "840.00",
+   "tax_rate": "13%",
+   "tax_amount": "109.20"
+  },
+  {
+   "product_name": "*食品*咖啡豆",
+   "specification": "1kg",
+   "unit": "袋",
+   "quantity": "4",
+   "unit_price": "168.00",
+   "amount": "672.00",
+   "tax_rate": "13%",
+   "tax_amount": "87.36"
+  },
+  {
+   "product_name": "*日用品*纸巾",
+   "specification": "",
+   "unit": "提",
+   "quantity": "15",
+   "unit_price": "32.90",
+   "amount": "493.50",
+   "tax_rate": "13%",
+   "tax_amount": "64.16"
+  },
+  {
+   "product_name": "*餐饮服务*餐费",
+   "specification": "",
+   "unit": "",
+   "quantity": "1",
+   "unit_price": "860.00",
+   "amount": "860.00",
+   "tax_rate": "6%",
+   "tax_amount": "51.60"
+  },
+  {
+   "product_name": "*电子产品*无线鼠标",
+   "specification": "M330",
+   "unit": "个",
+   "quantity": "8",
+   "unit_price": "79.00",
+   "amount": "632.00",
+   "tax_rate": "13%",
+   "tax_amount": "82.16"
+  },
+  {
+   "product_name": "*日用品*垃圾袋",
+   "specification": "",
+   "unit": "卷",
+   "quantity": "50",
+   "unit_price": "3.50",
+   "amount": "175.00",
+   "tax_rate": "13%",
+   "tax_amount": "22.75"
+  }
+ ]
+}

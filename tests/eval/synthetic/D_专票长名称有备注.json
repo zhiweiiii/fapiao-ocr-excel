@@ -1,0 +1,27 @@
+{
+ "invoice_type": "电子发票（增值税专用发票）",
+ "invoice_number": "24312000000123456789",
+ "invoice_date": "2024年09月18日",
+ "buyer_name": "中国建筑第八工程局有限公司华东分公司苏州项目部",
+ "buyer_tax_id": "91320500MA1N2PQR7T",
+ "seller_name": "江苏顺达物流供应链管理集团股份有限公司",
+ "seller_tax_id": "91320594MA20STUV8Y",
+ "total_amount": "9100.00",
+ "total_tax": "819.00",
+ "total_with_tax_cn": "玖仟玖佰壹拾玖元整",
+ "total_with_tax_num": "9919.00",
+ "remark": "起运地：苏州 到达地：南京 车牌号：苏E12345",
+ "issuer": "李建国",
+ "items": [
+  {
+   "product_name": "*运输服务*国内道路货物运输服务",
+   "specification": "",
+   "unit": "吨",
+   "quantity": "35",
+   "unit_price": "260.00",
+   "amount": "9100.00",
+   "tax_rate": "9%",
+   "tax_amount": "819.00"
+  }
+ ]
+}

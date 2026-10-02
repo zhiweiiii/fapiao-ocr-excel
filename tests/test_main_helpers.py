@@ -30,6 +30,85 @@ def test_clean_value_leaves_plain_value_untouched():
     assert main.clean_value("339901999999142") == "339901999999142"
 
 
+@pytest.mark.parametrize("text,expected", [
+    ("贰分", "0.02"), ("伍仟叁佰元整", "5300"), ("捌仟陆佰捌拾肆元捌角", "8684.8"),
+    ("壹佰元零伍分", "100.05"), ("壹拾万零贰佰元整", "100200"), ("拾元整", "10"), ("壹亿贰仟万元整", "120000000"),
+])
+def test_parse_cn_money(text, expected):
+    from decimal import Decimal
+    assert main.parse_cn_money(text) == Decimal(expected)
+
+
+def test_parse_cn_money_rejects_garbage():
+    assert main.parse_cn_money("开票人") is None
+    assert main.parse_cn_money("") is None
+
+
+def test_split_merged_qty_price_uses_amount():
+    item = {"quantity": "", "unit_price": "10.0183486238532", "amount": "0.02"}
+    main.split_merged_qty_price(item)
+    assert (item["quantity"], item["unit_price"]) == ("1", "0.0183486238532")
+
+
+@pytest.mark.parametrize("qty,price,amount", [
+    ("", "5000.00", "5000.00"),   # 数量省略，单价等于金额
+    ("2", "79.00", "158.00"),     # 数量、单价都有
+    ("", "", "-160.00"),          # 折扣行
+])
+def test_split_merged_qty_price_leaves_normal_rows(qty, price, amount):
+    item = {"quantity": qty, "unit_price": price, "amount": amount}
+    main.split_merged_qty_price(item)
+    assert (item["quantity"], item["unit_price"]) == (qty, price)
+
+
+def test_split_stacked_cells_only_splits_inside_item_table():
+    import numpy as np
+    rows = [("*电子产品*鼠标", "8", "632.00"), ("*日用品*垃圾袋", "50", "175.00")]
+    texts, boxes = ["项目名称", "金额"], [np.array([30, 300, 160, 320]), np.array([800, 300, 860, 320])]
+    for r, (name, qty, amount) in enumerate(rows):
+        top = 330 + r * 20
+        texts += [name, qty, amount]
+        boxes += [np.array([30, top, 190, top + 20]), np.array([560, top, 585, top + 20]),
+                  np.array([808, top, 868, top + 20])]
+    texts += ["个卷", "备注"]
+    boxes += [np.array([400, 330, 420, 370]), np.array([35, 400, 55, 460])]
+
+    out_texts, out_boxes = main.split_stacked_cells(texts, boxes)
+    # 明细区域里粘连的"个卷"拆成两行；表格下方竖排的"备注"标签保持不变（OCR 漏识别合计行时也一样）
+    assert out_texts[-3:] == ["个", "卷", "备注"]
+    assert out_boxes[-3][3] == out_boxes[-2][1] == 350
+
+
+def _valid_invoice():
+    return {
+        "invoice_number": "24312000000123456789", "invoice_date": "2024年09月18日",
+        "buyer_name": "上海星辰科技有限公司", "buyer_tax_id": "91310115MA1K4ABCD2",
+        "seller_name": "北京云帆软件服务有限公司", "seller_tax_id": "91110108MA01XYZW3Q",
+        "total_amount": "3000.00", "total_tax": "390.00",
+        "total_with_tax_cn": "叁仟叁佰玖拾元整", "total_with_tax_num": "3390.00",
+        "items": [
+            {"quantity": "2", "unit_price": "1580.00", "amount": "3160.00", "tax_amount": "410.80"},
+            {"quantity": "", "unit_price": "", "amount": "-160.00", "tax_amount": "-20.80"},
+        ],
+    }
+
+
+def test_validate_invoice_passes_consistent_invoice():
+    assert main.validate_invoice(_valid_invoice()) == []
+
+
+def test_validate_invoice_flags_inconsistencies():
+    info = _valid_invoice()
+    info["items"][0]["amount"] = "3100.00"           # 明细之和与合计不符，且数量×单价≠金额
+    info["total_with_tax_cn"] = "叁仟叁佰玖拾壹元整"  # 大小写不一致
+    info["buyer_tax_id"] = "入识别号：91310115"       # 税号格式异常
+    problems = main.validate_invoice(info)
+    assert any("明细金额之和" in p for p in problems)
+    assert "第1行数量×单价≠金额" in problems
+    assert "价税合计大小写不一致" in problems
+    assert "购买方税号格式异常" in problems
+
+
 def test_create_invoices_with_pandas_writes_two_sheets(tmp_path):
     data_list = [{
         "invoice_type": "电子发票（普通发票）",
@@ -86,6 +165,9 @@ def test_ocr_excel_success_returns_excel_without_temp_files(client, monkeypatch,
     result_all = [{"rec_texts": dump["texts"], "rec_boxes": [np.array(b) for b in dump["boxes"]]}]
 
     class FakeOCRManager:
+        def run_exclusive(self, fn, *args):
+            return fn(*args)
+
         def submit_ocr(self, **kwargs):
             return "", result_all
 

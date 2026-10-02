@@ -8,9 +8,11 @@
 ![alt text](img/image-3.png)
 ![alt text](img/image-4.png)
 ## 功能特点
-- **发票 OCR 识别**：利用 PaddleOCR 技术，实现对发票图片（jpg、png、pdf等）的文字识别，支持多种发票类型。
-- **数据清洗**：对识别出的文字进行清洗，去除噪声和异常值，确保数据质量。
-- **Excel 导出**：将处理后的数据导出为 Excel 格式，方便用户查看和分析。
+- **电子发票 PDF 直接读文本层**：税务系统生成的电子发票 PDF 自带精确的文字和坐标，直接读取，不经过 OCR，单张几十毫秒、不会认错字。
+- **图片/扫描件 OCR 识别**：没有文本层的扫描件、图片（jpg、png、bmp）用 PaddleOCR 识别。
+- **金额交叉校验**：明细金额之和与合计、合计+税额与价税合计、大写与小写金额、数量×单价与金额相互核对；
+  不一致或字段缺失、格式异常时，在 Excel 的「复核提示」列写明原因，提醒人工核对。
+- **Excel 导出**：发票主表 + 商品明细两个工作表。
 
 ## 技术栈
 - **后端**：Flask 框架
@@ -58,15 +60,37 @@ PORT=8080 python3 main.py
 ```bash
 pip install -r requirements-dev.txt
 
-# 纯逻辑单元测试（不需要安装 paddleocr，几秒内跑完）
-pytest tests/test_main_helpers.py tests/test_extract_invoice_info.py
-
-# 真实 OCR 识别准确率测试（需要已安装 paddleocr，会调用真实模型，比较慢）
-python3 -m tests.test_ocr_compare
+# 单元测试 + PDF 文本层回归测试（不需要 OCR 模型，几秒内跑完；每个 PR 都会在 CI 中自动运行）
+pytest tests/test_main_helpers.py tests/test_extract_invoice_info.py tests/test_pdf_text.py
 ```
 
-目前只测试了标准的发票文件，对于手拍的文件或者其他文件，暂未测试过
-未来如果有提供数据的，可以尝试进一步优化
+## 识别准确率
+
+`tests/eval/eval_accuracy.py` 会把每张测试发票的识别结果与人工标注的真值逐字段比对：
+
+```bash
+python -m tests.eval.eval_accuracy                  # 与线上一致：PDF 优先读文本层，图片走 OCR
+python -m tests.eval.eval_accuracy --source ocr     # 全部强制走 OCR
+python -m tests.eval.eval_accuracy --source text    # 只评估 PDF 文本层（不需要 OCR 模型）
+python -m tests.eval.eval_accuracy --verbose        # 打印每个识别错误的字段
+```
+
+测试集：`data/` 下的真实发票 1 张，以及 `tests/eval/synthetic/` 下按真实版式生成的合成发票 7 张
+（单行/多行明细、规格单位、品名换行、专票长名称带备注、折扣行、无数量单价），
+另外由合成发票渲染出扫描图、模拟手机拍照（倾斜 3°+模糊+压缩）、旋转 90° 的图片。
+
+| 输入类型 | 主表字段 | 明细字段 |
+|---|---|---|
+| 电子发票 PDF（8 张，文本层） | 100% | 100% |
+| 清晰扫描图（2 张，OCR） | 100% | 100% |
+| 模拟手机拍照（2 张，OCR） | 约 54% | 约 13% |
+| 旋转 90°（1 张，OCR） | 约 15% | 约 25% |
+
+注意：合成发票比真实发票干净，以上数字应视为标准电子发票的上限；纸质专票、其他票种尚未测试。
+手机拍照和旋转图片目前基本不可用（同一行文字因倾斜被拆到不同行），但会在「复核提示」列中标出问题。
+
+**欢迎提供真实发票样本**：放到 `data/` 下，附同名 `.json` 真值（格式参考 `data/电票1.json`），
+即可自动纳入准确率评估和回归测试。
 
 目前使用的服务器性能有限，所以处理速度较慢，一个文件10s左右，请耐心等待
 欢迎交流

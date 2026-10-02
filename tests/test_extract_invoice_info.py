@@ -53,14 +53,10 @@ def test_extract_invoice_info_items_core_fields():
     truth_items = truth["items"]
     assert len(items) == len(truth_items)
 
-    # 已知限制：当数量和单价被 OCR 识别成同一个不带分隔符的文本框
-    # （如 "10.0183486238532"，本应是数量"1"+单价"0.0183486238532"）时，
-    # 目前的规则无法可靠拆分，这里先不校验这两个字段。
-    skip_fields = {"quantity", "unit_price"}
+    # OCR 把数量"1"和单价"0.0183486238532"识别成了一串"10.0183486238532"，
+    # 需要靠"数量×单价≈金额"拆开
     for got, expected_row in zip(items, truth_items):
         for key, expected in expected_row.items():
-            if key in skip_fields:
-                continue
             assert str(got.get(key, "")).strip() == str(expected).strip(), (
                 f"明细字段 {key} 不匹配: got={got.get(key)!r} expected={expected!r}"
             )

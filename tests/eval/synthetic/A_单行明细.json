@@ -1,0 +1,27 @@
+{
+ "invoice_type": "电子发票（普通发票）",
+ "invoice_number": "24312000000123456789",
+ "invoice_date": "2024年09月18日",
+ "buyer_name": "上海星辰科技有限公司",
+ "buyer_tax_id": "91310115MA1K4ABCD2",
+ "seller_name": "北京云帆软件服务有限公司",
+ "seller_tax_id": "91110108MA01XYZW3Q",
+ "total_amount": "5000.00",
+ "total_tax": "300.00",
+ "total_with_tax_cn": "伍仟叁佰元整",
+ "total_with_tax_num": "5300.00",
+ "remark": "",
+ "issuer": "王芳",
+ "items": [
+  {
+   "product_name": "*信息技术服务*软件开发服务",
+   "specification": "",
+   "unit": "",
+   "quantity": "1",
+   "unit_price": "5000.00",
+   "amount": "5000.00",
+   "tax_rate": "6%",
+   "tax_amount": "300.00"
+  }
+ ]
+}

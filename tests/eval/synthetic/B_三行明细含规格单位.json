@@ -1,0 +1,47 @@
+{
+ "invoice_type": "电子发票（普通发票）",
+ "invoice_number": "24312000000987654321",
+ "invoice_date": "2024年10月08日",
+ "buyer_name": "上海星辰科技有限公司",
+ "buyer_tax_id": "91310115MA1K4ABCD2",
+ "seller_name": "北京云帆软件服务有限公司",
+ "seller_tax_id": "91110108MA01XYZW3Q",
+ "total_amount": "1665.00",
+ "total_tax": "213.30",
+ "total_with_tax_cn": "壹仟捌佰柒拾捌元叁角",
+ "total_with_tax_num": "1878.30",
+ "remark": "",
+ "issuer": "王芳",
+ "items": [
+  {
+   "product_name": "*纸制品*复印纸",
+   "specification": "A4 70g",
+   "unit": "箱",
+   "quantity": "10",
+   "unit_price": "125.00",
+   "amount": "1250.00",
+   "tax_rate": "13%",
+   "tax_amount": "162.50"
+  },
+  {
+   "product_name": "*办公用品*中性笔",
+   "specification": "0.5mm",
+   "unit": "盒",
+   "quantity": "20",
+   "unit_price": "18.50",
+   "amount": "370.00",
+   "tax_rate": "13%",
+   "tax_amount": "48.10"
+  },
+  {
+   "product_name": "*现代服务*快递服务",
+   "specification": "",
+   "unit": "次",
+   "quantity": "3",
+   "unit_price": "15.00",
+   "amount": "45.00",
+   "tax_rate": "6%",
+   "tax_amount": "2.70"
+  }
+ ]
+}

@@ -49,6 +49,11 @@ class PaddleOCRModelManager(ThreadPoolExecutor):
             self.active_tasks -= 1
             self.logger.info(f"OCR任务完成，当前活跃任务数: {self.active_tasks}")
 
+    def run_exclusive(self, fn, *args):
+        # pdfium 不是线程安全的，PaddleOCR 渲染 PDF 时也在本线程池里用它，
+        # 读取 PDF 文本层等操作也放到这个单线程池里串行执行
+        return self.submit(fn, *args).result(timeout=600)
+
     def infer(self, **kwargs):
         start_time = time.time()
         input_path = kwargs.get('input', '')
