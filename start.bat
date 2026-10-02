@@ -5,7 +5,7 @@ cd /d "%~dp0"
 title 发票OCR识别工具
 
 rem ===== 配置（一般无需修改）=====
-if not defined PORT set "PORT=8765"
+if not defined PORT set "PORT=39417"
 set "HOST=127.0.0.1"
 if not defined OPEN_BROWSER set "OPEN_BROWSER=1"
 if not defined PIP_INDEX_URL set "PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/"
